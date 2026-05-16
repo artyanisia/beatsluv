@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import auth, feedback, generation_requests, tracks
+from app.routers import auth, feedback, generation_requests, tracks, analytics
 
 
 app = FastAPI(title="BeatsLuv API")
@@ -15,6 +15,10 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:5175",
+        "http://127.0.0.1:5175",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -38,3 +42,4 @@ app.include_router(auth.router)
 app.include_router(tracks.router)
 app.include_router(generation_requests.router)
 app.include_router(feedback.router)
+app.include_router(analytics.router)

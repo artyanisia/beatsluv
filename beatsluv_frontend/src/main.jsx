@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 import { AuthProvider, useAuth } from "./AuthContext";
 import AuthForm from "./AuthForm";
+import Dashboard from "./Dashboard";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
@@ -20,13 +21,19 @@ function buildAudioUrl(audioUrl) {
 
 function AppContent() {
   const { user, logout, getAuthHeaders, loading } = useAuth();
+  
+  // Debug logging
+  console.log('AppContent render - user:', user, 'loading:', loading);
+  
   const [tracks, setTracks] = useState([]);
   const [selectedTrackId, setSelectedTrackId] = useState("");
   const [feedbackList, setFeedbackList] = useState([]);
   const [message, setMessage] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
   const [isLoadingTracks, setIsLoadingTracks] = useState(false);
+  
+  // Navigation state
+  const [currentView, setCurrentView] = useState('generator'); // 'generator' or 'dashboard'
 
   const [generationForm, setGenerationForm] = useState({
     prompt: "Create a dreamy pop beat with soft vocals",
@@ -46,25 +53,7 @@ function AppContent() {
     sentiment_score: 0.8,
   });
 
-  const [importForm, setImportForm] = useState({
-    query: "pop",
-    genre: "pop",
-    mood: "reference",
-    limit: 10,
-  });
-
-  if (loading) {
-    return (
-      <div className="loading-container">
-        <div className="loading-spinner">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <AuthForm />;
-  }
-
+  // All hooks must be called before any early returns
   const selectedTrack = useMemo(
     () => tracks.find((track) => String(track.id) === String(selectedTrackId)),
     [tracks, selectedTrackId],
@@ -119,13 +108,34 @@ function AppContent() {
     }
   }
 
+  // All hooks must be called before any early returns
   useEffect(() => {
-    fetchTracks();
-  }, []);
+    if (user) {
+      fetchTracks();
+    }
+  }, [user]);
 
   useEffect(() => {
-    fetchFeedback(selectedTrackId);
-  }, [selectedTrackId]);
+    if (user && selectedTrackId) {
+      fetchFeedback(selectedTrackId);
+    }
+  }, [selectedTrackId, user]);
+
+  // Early returns after all hooks
+  if (loading) {
+    return (
+      <div className="loading-container">
+        <div className="loading-spinner">
+          <div>Loading BeatsLuv...</div>
+          <div className="spinner"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthForm />;
+  }
 
   function updateGenerationField(field, value) {
     setGenerationForm((current) => ({
@@ -136,13 +146,6 @@ function AppContent() {
 
   function updateFeedbackField(field, value) {
     setFeedbackForm((current) => ({
-      ...current,
-      [field]: value,
-    }));
-  }
-
-  function updateImportField(field, value) {
-    setImportForm((current) => ({
       ...current,
       [field]: value,
     }));
@@ -224,57 +227,37 @@ function AppContent() {
     }
   }
 
-  async function handleMusicBrainzImport(event) {
-    event.preventDefault();
-    setIsImporting(true);
-    setMessage("Importing MusicBrainz tracks...");
-
-    const payload = {
-      ...importForm,
-      limit: Number(importForm.limit),
-      genre: importForm.genre || null,
-      mood: importForm.mood || null,
-    };
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/tracks/import/musicbrainz`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data.detail || "Could not import MusicBrainz tracks.");
-      }
-
-      setMessage(`Imported ${data.count} MusicBrainz tracks.`);
-      await fetchTracks();
-      if (data.tracks?.length > 0) {
-        setSelectedTrackId(String(data.tracks[0].id));
-      }
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setIsImporting(false);
-    }
-  }
 
   return (
     <main className="app-shell">
       <section className="top-bar">
         <div>
           <p className="eyebrow">BeatsLuv</p>
-          <h1>Music Generator</h1>
+          <h1>{currentView === 'dashboard' ? 'Analytics Dashboard' : 'Music Generator'}</h1>
+        </div>
+        <div className="nav-actions">
+          <button 
+            type="button" 
+            onClick={() => setCurrentView('generator')}
+            className={currentView === 'generator' ? 'nav-button active' : 'nav-button'}
+          >
+            Generator
+          </button>
+          <button 
+            type="button" 
+            onClick={() => setCurrentView('dashboard')}
+            className={currentView === 'dashboard' ? 'nav-button active' : 'nav-button'}
+          >
+            Dashboard
+          </button>
         </div>
         <div className="user-actions">
           <span className="user-info">Welcome, {user.email}</span>
-          <button type="button" onClick={fetchTracks} disabled={isLoadingTracks}>
-            {isLoadingTracks ? "Loading..." : "Refresh"}
-          </button>
+          {currentView === 'generator' && (
+            <button type="button" onClick={fetchTracks} disabled={isLoadingTracks}>
+              {isLoadingTracks ? "Loading..." : "Refresh"}
+            </button>
+          )}
           <button type="button" onClick={logout} className="logout-button">
             Logout
           </button>
@@ -282,279 +265,249 @@ function AppContent() {
       </section>
 
       {message && <div className="status-message">{message}</div>}
+      
+      {/* Conditional rendering based on current view */}
+      {currentView === 'dashboard' ? (
+        <Dashboard />
+      ) : (
+        <>
+          <section className="layout">
+            <form className="panel" onSubmit={handleGenerate}>
+              <div className="panel-heading">
+                <h2>Generate Music</h2>
+                <span>ACE-Step</span>
+              </div>
 
-      <form className="metadata-toolbar" onSubmit={handleMusicBrainzImport}>
-        <label>
-          MusicBrainz Search
-          <input
-            value={importForm.query}
-            onChange={(event) => updateImportField("query", event.target.value)}
-          />
-        </label>
-        <label>
-          Genre
-          <input
-            value={importForm.genre}
-            onChange={(event) => updateImportField("genre", event.target.value)}
-          />
-        </label>
-        <label>
-          Mood
-          <input
-            value={importForm.mood}
-            onChange={(event) => updateImportField("mood", event.target.value)}
-          />
-        </label>
-        <label>
-          Count
-          <input
-            type="number"
-            min="1"
-            max="50"
-            value={importForm.limit}
-            onChange={(event) => updateImportField("limit", event.target.value)}
-          />
-        </label>
-        <button type="submit" disabled={isImporting}>
-          {isImporting ? "Importing..." : "Import Songs"}
-        </button>
-      </form>
+              <label>
+                Prompt
+                <textarea
+                  rows="4"
+                  value={generationForm.prompt}
+                  onChange={(event) => updateGenerationField("prompt", event.target.value)}
+                />
+              </label>
 
-      <section className="layout">
-        <form className="panel" onSubmit={handleGenerate}>
-          <div className="panel-heading">
-            <h2>Generate Music</h2>
-            <span>ACE-Step</span>
-          </div>
+              <div className="form-grid">
+                <label>
+                  Genre
+                  <input
+                    value={generationForm.genre}
+                    onChange={(event) => updateGenerationField("genre", event.target.value)}
+                  />
+                </label>
 
-          <label>
-            Prompt
-            <textarea
-              rows="4"
-              value={generationForm.prompt}
-              onChange={(event) => updateGenerationField("prompt", event.target.value)}
-            />
-          </label>
+                <label>
+                  Mood
+                  <input
+                    value={generationForm.mood}
+                    onChange={(event) => updateGenerationField("mood", event.target.value)}
+                  />
+                </label>
 
-          <div className="form-grid">
-            <label>
-              Genre
-              <input
-                value={generationForm.genre}
-                onChange={(event) => updateGenerationField("genre", event.target.value)}
-              />
-            </label>
+                <label>
+                  Tempo
+                  <input
+                    type="number"
+                    value={generationForm.tempo}
+                    onChange={(event) => updateGenerationField("tempo", event.target.value)}
+                  />
+                </label>
 
-            <label>
-              Mood
-              <input
-                value={generationForm.mood}
-                onChange={(event) => updateGenerationField("mood", event.target.value)}
-              />
-            </label>
+                <label>
+                  Duration
+                  <input
+                    type="number"
+                    min="1"
+                    value={generationForm.duration_seconds}
+                    onChange={(event) =>
+                      updateGenerationField("duration_seconds", event.target.value)
+                    }
+                  />
+                </label>
+              </div>
 
-            <label>
-              Tempo
-              <input
-                type="number"
-                value={generationForm.tempo}
-                onChange={(event) => updateGenerationField("tempo", event.target.value)}
-              />
-            </label>
-
-            <label>
-              Duration
-              <input
-                type="number"
-                min="1"
-                value={generationForm.duration_seconds}
-                onChange={(event) =>
-                  updateGenerationField("duration_seconds", event.target.value)
-                }
-              />
-            </label>
-          </div>
-
-          <button type="submit" disabled={isGenerating}>
-            {isGenerating ? "Generating..." : "Generate Track"}
-          </button>
-        </form>
-
-        <section className="panel">
-          <div className="panel-heading">
-            <h2>Tracks</h2>
-            <span>Library</span>
-          </div>
-
-          <div className="track-list">
-            {tracks.length === 0 && <p className="empty-state">No tracks yet.</p>}
-
-            {tracks.map((track) => (
-              <button
-                type="button"
-                className={String(track.id) === String(selectedTrackId) ? "track active" : "track"}
-                key={track.id}
-                onClick={() => setSelectedTrackId(String(track.id))}
-              >
-                <strong>{track.title}</strong>
-                <span>
-                  {track.artist ? `${track.artist} - ` : ""}#{track.id} - {track.status}
-                </span>
+              <button type="submit" disabled={isGenerating}>
+                {isGenerating ? "Generating..." : "Generate Track"}
               </button>
-            ))}
-          </div>
-        </section>
-      </section>
+            </form>
 
-      <section className="layout lower-layout">
-        <section className="panel">
-          <div className="panel-heading">
-            <h2>Selected Track</h2>
-            <span>Preview</span>
-          </div>
+            <section className="panel">
+              <div className="panel-heading">
+                <h2>Tracks</h2>
+                <span>Library</span>
+              </div>
 
-          {!selectedTrack && <p className="empty-state">Select a track to inspect it.</p>}
+              <div className="track-list">
+                {tracks.length === 0 && <p className="empty-state">No tracks yet.</p>}
 
-          {selectedTrack && (
-            <div className="track-details">
-              <dl>
-                <div>
-                  <dt>ID</dt>
-                  <dd>{selectedTrack.id}</dd>
-                </div>
-                <div>
-                  <dt>Title</dt>
-                  <dd>{selectedTrack.title}</dd>
-                </div>
-                <div>
-                  <dt>Artist</dt>
-                  <dd>{selectedTrack.artist || "N/A"}</dd>
-                </div>
-                <div>
-                  <dt>Album</dt>
-                  <dd>{selectedTrack.album || "N/A"}</dd>
-                </div>
-                <div>
-                  <dt>Status</dt>
-                  <dd>{selectedTrack.status}</dd>
-                </div>
-                <div>
-                  <dt>Duration</dt>
-                  <dd>{selectedTrack.duration_seconds}s</dd>
-                </div>
-                <div>
-                  <dt>Source</dt>
-                  <dd>{selectedTrack.source || "ACE-Step"}</dd>
-                </div>
-                <div>
-                  <dt>Genre</dt>
-                  <dd>{selectedTrack.genre || "N/A"}</dd>
-                </div>
-              </dl>
+                {tracks.map((track) => (
+                  <button
+                    type="button"
+                    className={String(track.id) === String(selectedTrackId) ? "track active" : "track"}
+                    key={track.id}
+                    onClick={() => setSelectedTrackId(String(track.id))}
+                  >
+                    <strong>{track.title}</strong>
+                    <span>
+                      {track.artist ? `${track.artist} - ` : ""}#{track.id} - {track.status}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          </section>
 
-              <audio controls src={buildAudioUrl(selectedTrack.audio_url)} />
-              <a href={buildAudioUrl(selectedTrack.audio_url)} target="_blank" rel="noreferrer">
-                Open audio URL
-              </a>
-              {selectedTrack.external_url && (
-                <a href={selectedTrack.external_url} target="_blank" rel="noreferrer">
-                  Open MusicBrainz page
-                </a>
+          <section className="layout lower-layout">
+            <section className="panel">
+              <div className="panel-heading">
+                <h2>Selected Track</h2>
+                <span>Preview</span>
+              </div>
+
+              {!selectedTrack && <p className="empty-state">Select a track to inspect it.</p>}
+
+              {selectedTrack && (
+                <div className="track-details">
+                  <dl>
+                    <div>
+                      <dt>ID</dt>
+                      <dd>{selectedTrack.id}</dd>
+                    </div>
+                    <div>
+                      <dt>Title</dt>
+                      <dd>{selectedTrack.title}</dd>
+                    </div>
+                    <div>
+                      <dt>Artist</dt>
+                      <dd>{selectedTrack.artist || "N/A"}</dd>
+                    </div>
+                    <div>
+                      <dt>Album</dt>
+                      <dd>{selectedTrack.album || "N/A"}</dd>
+                    </div>
+                    <div>
+                      <dt>Status</dt>
+                      <dd>{selectedTrack.status}</dd>
+                    </div>
+                    <div>
+                      <dt>Duration</dt>
+                      <dd>{selectedTrack.duration_seconds}s</dd>
+                    </div>
+                    <div>
+                      <dt>Source</dt>
+                      <dd>{selectedTrack.source || "ACE-Step"}</dd>
+                    </div>
+                    <div>
+                      <dt>Genre</dt>
+                      <dd>{selectedTrack.genre || "N/A"}</dd>
+                    </div>
+                  </dl>
+
+                  <audio controls src={buildAudioUrl(selectedTrack.audio_url)} />
+                  <a href={buildAudioUrl(selectedTrack.audio_url)} target="_blank" rel="noreferrer">
+                    Open audio URL
+                  </a>
+                  {selectedTrack.external_url && (
+                    <a href={selectedTrack.external_url} target="_blank" rel="noreferrer">
+                      Open MusicBrainz page
+                    </a>
+                  )}
+                </div>
               )}
-            </div>
-          )}
-        </section>
+            </section>
 
-        <form className="panel" onSubmit={handleFeedbackSubmit}>
-          <div className="panel-heading">
-            <h2>Feedback</h2>
-            <span>Listener notes</span>
-          </div>
+            <form className="panel" onSubmit={handleFeedbackSubmit}>
+              <div className="panel-heading">
+                <h2>Feedback</h2>
+                <span>Listener notes</span>
+              </div>
 
-          <div className="form-grid">
-            <label>
-              Rating
-              <input
-                type="number"
-                min="1"
-                max="5"
-                value={feedbackForm.rating}
-                onChange={(event) => updateFeedbackField("rating", event.target.value)}
-              />
-            </label>
+              <div className="form-grid">
+                <label>
+                  Rating
+                  <input
+                    type="number"
+                    min="1"
+                    max="5"
+                    value={feedbackForm.rating}
+                    onChange={(event) => updateFeedbackField("rating", event.target.value)}
+                  />
+                </label>
 
-            <label>
-              Listens
-              <input
-                type="number"
-                min="0"
-                value={feedbackForm.listen_count}
-                onChange={(event) => updateFeedbackField("listen_count", event.target.value)}
-              />
-            </label>
+                <label>
+                  Listens
+                  <input
+                    type="number"
+                    min="0"
+                    value={feedbackForm.listen_count}
+                    onChange={(event) => updateFeedbackField("listen_count", event.target.value)}
+                  />
+                </label>
 
-            <label>
-              Sentiment
-              <input
-                type="number"
-                step="0.1"
-                min="-1"
-                max="1"
-                value={feedbackForm.sentiment_score}
-                onChange={(event) => updateFeedbackField("sentiment_score", event.target.value)}
-              />
-            </label>
-          </div>
+                <label>
+                  Sentiment
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="-1"
+                    max="1"
+                    value={feedbackForm.sentiment_score}
+                    onChange={(event) => updateFeedbackField("sentiment_score", event.target.value)}
+                  />
+                </label>
+              </div>
 
-          <label>
-            Comment
-            <textarea
-              rows="3"
-              value={feedbackForm.comment}
-              onChange={(event) => updateFeedbackField("comment", event.target.value)}
-            />
-          </label>
+              <label>
+                Comment
+                <textarea
+                  rows="3"
+                  value={feedbackForm.comment}
+                  onChange={(event) => updateFeedbackField("comment", event.target.value)}
+                />
+              </label>
 
-          <div className="checks">
-            <label>
-              <input
-                type="checkbox"
-                checked={feedbackForm.liked}
-                onChange={(event) => updateFeedbackField("liked", event.target.checked)}
-              />
-              Liked
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={feedbackForm.downloaded}
-                onChange={(event) => updateFeedbackField("downloaded", event.target.checked)}
-              />
-              Downloaded
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={feedbackForm.shared}
-                onChange={(event) => updateFeedbackField("shared", event.target.checked)}
-              />
-              Shared
-            </label>
-          </div>
+              <div className="checks">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={feedbackForm.liked}
+                    onChange={(event) => updateFeedbackField("liked", event.target.checked)}
+                  />
+                  Liked
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={feedbackForm.downloaded}
+                    onChange={(event) => updateFeedbackField("downloaded", event.target.checked)}
+                  />
+                  Downloaded
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={feedbackForm.shared}
+                    onChange={(event) => updateFeedbackField("shared", event.target.checked)}
+                  />
+                  Shared
+                </label>
+              </div>
 
-          <button type="submit">Save Feedback</button>
+              <button type="submit">Save Feedback</button>
 
-          <div className="feedback-list">
-            {feedbackList.map((item) => (
-              <article key={item.id}>
-                <strong>Rating {item.rating ?? "N/A"}</strong>
-                <p>{item.comment || "No comment"}</p>
-                <span>{item.liked ? "Liked" : "Not liked"} - {item.listen_count} listens</span>
-              </article>
-            ))}
-          </div>
-        </form>
-      </section>
+              <div className="feedback-list">
+                {feedbackList.map((item) => (
+                  <article key={item.id}>
+                    <strong>Rating {item.rating ?? "N/A"}</strong>
+                    <p>{item.comment || "No comment"}</p>
+                    <span>{item.liked ? "Liked" : "Not liked"} - {item.listen_count} listens</span>
+                  </article>
+                ))}
+              </div>
+            </form>
+          </section>
+        </>
+      )}
     </main>
   );
 }
@@ -567,4 +520,17 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+try {
+  const rootElement = document.getElementById("root");
+  if (!rootElement) {
+    throw new Error("Root element not found");
+  }
+  
+  console.log("Starting BeatsLuv app...");
+  const root = createRoot(rootElement);
+  root.render(<App />);
+  console.log("App rendered successfully");
+} catch (error) {
+  console.error("Failed to render app:", error);
+  document.body.innerHTML = `<div style="padding: 20px; color: red;"><h2>Error loading BeatsLuv</h2><p>${error.message}</p><p>Check browser console for more details</p></div>`;
+}

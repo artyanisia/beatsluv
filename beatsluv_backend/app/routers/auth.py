@@ -10,6 +10,7 @@ from app.auth import (
     authenticate_user,
     create_access_token,
     create_user,
+    user_exists,
     verify_token
 )
 
@@ -33,6 +34,16 @@ class Token(BaseModel):
     access_token: str
     token_type: str
     user: UserResponse
+
+
+class UserExistsResponse(BaseModel):
+    exists: bool
+
+
+@router.get("/exists", response_model=UserExistsResponse)
+async def check_user_exists(email: EmailStr):
+    """Check whether an email already has a BeatsLuv account."""
+    return UserExistsResponse(exists=user_exists(email))
 
 
 @router.post("/signup", response_model=UserResponse)

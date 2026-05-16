@@ -4,6 +4,6 @@ psycopg[binary]
 python-dotenv
 httpx
 python-jose[cryptography]
-passlib[bcrypt]
+bcrypt
 python-multipart
 email-validator

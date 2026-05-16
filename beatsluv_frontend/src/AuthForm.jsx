@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from './AuthContext';
 
 const AuthForm = () => {
@@ -7,13 +7,90 @@ const AuthForm = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [emailExists, setEmailExists] = useState(null);
+  const [checkingEmail, setCheckingEmail] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const { login, signup } = useAuth();
+  const { login, signup, checkEmailExists } = useAuth();
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const canCheckEmail = useMemo(
+    () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail),
+    [normalizedEmail],
+  );
+
+  useEffect(() => {
+    setError('');
+
+    if (!canCheckEmail) {
+      setEmailExists(null);
+      setCheckingEmail(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCheckingEmail(true);
+
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const exists = await checkEmailExists(normalizedEmail);
+        if (!cancelled) {
+          setEmailExists(exists);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setEmailExists(null);
+          setError(err.message || 'Could not check account.');
+        }
+      } finally {
+        if (!cancelled) {
+          setCheckingEmail(false);
+        }
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [canCheckEmail, checkEmailExists, normalizedEmail, isLogin]);
+
+  const accountMessage = useMemo(() => {
+    if (!canCheckEmail || checkingEmail || emailExists === null) {
+      return '';
+    }
+
+    if (isLogin && !emailExists) {
+      return 'No account exists for this email. Please create an account first.';
+    }
+
+    if (!isLogin && emailExists) {
+      return 'This email already has an account. Please sign in.';
+    }
+
+    return '';
+  }, [canCheckEmail, checkingEmail, emailExists, isLogin]);
+
+  const shouldDisableSubmit =
+    loading ||
+    checkingEmail ||
+    (isLogin && emailExists === false) ||
+    (!isLogin && emailExists === true);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (isLogin && emailExists === false) {
+      setError('No account exists for this email. Please create an account first.');
+      return;
+    }
+
+    if (!isLogin && emailExists === true) {
+      setError('This email already has an account. Please sign in.');
+      return;
+    }
+
     setLoading(true);
 
     if (!isLogin && password !== confirmPassword) {
@@ -36,10 +113,18 @@ const AuthForm = () => {
         result = await signup(email, password);
       }
 
-      if (!result.success) {
+      if (result.success) {
+        // Success! The redirect will happen automatically via AuthContext
+        // Clear the form
+        setEmail('');
+        setPassword('');
+        setConfirmPassword('');
+        setError('');
+      } else {
         setError(result.error);
       }
     } catch (err) {
+      console.error('Authentication error:', err);
       setError('An unexpected error occurred');
     } finally {
       setLoading(false);
@@ -52,6 +137,8 @@ const AuthForm = () => {
     setEmail('');
     setPassword('');
     setConfirmPassword('');
+    setEmailExists(null);
+    setCheckingEmail(false);
   };
 
   return (
@@ -81,6 +168,8 @@ const AuthForm = () => {
               required
               placeholder="Enter your email"
             />
+            {checkingEmail && <span className="field-hint">Checking account...</span>}
+            {accountMessage && <span className="field-warning">{accountMessage}</span>}
           </div>
 
           <div className="form-group">
@@ -111,7 +200,7 @@ const AuthForm = () => {
             </div>
           )}
 
-          <button type="submit" disabled={loading} className="auth-button">
+          <button type="submit" disabled={shouldDisableSubmit} className="auth-button">
             {loading ? 'Please wait...' : (isLogin ? 'Sign In' : 'Create Account')}
           </button>
         </form>

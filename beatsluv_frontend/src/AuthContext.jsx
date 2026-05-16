@@ -17,6 +17,20 @@ export const AuthProvider = ({ children }) => {
 
   const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
+  const getErrorMessage = async (response, fallback) => {
+    const text = await response.text();
+    if (!text) {
+      return fallback;
+    }
+
+    try {
+      const data = JSON.parse(text);
+      return data.detail || fallback;
+    } catch {
+      return text;
+    }
+  };
+
   useEffect(() => {
     if (token) {
       validateToken();
@@ -37,6 +51,7 @@ export const AuthProvider = ({ children }) => {
         const userData = await response.json();
         setUser(userData);
       } else {
+        console.warn('Token validation failed, logging out');
         logout();
       }
     } catch (error) {
@@ -59,17 +74,32 @@ export const AuthProvider = ({ children }) => {
 
       if (response.ok) {
         const data = await response.json();
+        console.log('Login successful, user data:', data);
         setToken(data.access_token);
         setUser(data.user);
         localStorage.setItem('token', data.access_token);
         return { success: true };
       } else {
-        const errorData = await response.json();
-        return { success: false, error: errorData.detail || 'Login failed' };
+        const error = await getErrorMessage(response, 'Login failed');
+        return { success: false, error };
       }
     } catch (error) {
-      return { success: false, error: 'Network error. Please try again.' };
+      return { success: false, error: `Network error: ${error.message}` };
     }
+  };
+
+  const checkEmailExists = async (email) => {
+    const response = await fetch(
+      `${API_BASE_URL}/auth/exists?email=${encodeURIComponent(email)}`,
+    );
+
+    if (!response.ok) {
+      const error = await getErrorMessage(response, 'Could not check account');
+      throw new Error(error);
+    }
+
+    const data = await response.json();
+    return data.exists;
   };
 
   const signup = async (email, password) => {
@@ -88,11 +118,11 @@ export const AuthProvider = ({ children }) => {
         const loginResult = await login(email, password);
         return loginResult;
       } else {
-        const errorData = await response.json();
-        return { success: false, error: errorData.detail || 'Signup failed' };
+        const error = await getErrorMessage(response, 'Signup failed');
+        return { success: false, error };
       }
     } catch (error) {
-      return { success: false, error: 'Network error. Please try again.' };
+      return { success: false, error: `Network error: ${error.message}` };
     }
   };
 
@@ -112,6 +142,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     login,
     signup,
+    checkEmailExists,
     logout,
     getAuthHeaders,
     isAuthenticated: !!user,
