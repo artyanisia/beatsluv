@@ -22,3 +22,16 @@ def get_connection():
         raise RuntimeError("DATABASE_URL is not set. Create a .env file first.")
 
     return psycopg.connect(DATABASE_URL, row_factory=dict_row)
+
+
+def get_db_connection():
+    """
+    Create a plain tuple-based PostgreSQL connection.
+
+    The auth helpers index rows by position, while the API routers use
+    get_connection() so they can return dictionary-like rows.
+    """
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL is not set. Create a .env file first.")
+
+    return psycopg.connect(DATABASE_URL)

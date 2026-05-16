@@ -3,3 +3,7 @@ uvicorn[standard]
 psycopg[binary]
 python-dotenv
 httpx
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+email-validator

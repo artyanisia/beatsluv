@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
+import { AuthProvider, useAuth } from "./AuthContext";
+import AuthForm from "./AuthForm";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
@@ -16,16 +18,17 @@ function buildAudioUrl(audioUrl) {
   return `${API_BASE_URL}${audioUrl}`;
 }
 
-function App() {
+function AppContent() {
+  const { user, logout, getAuthHeaders, loading } = useAuth();
   const [tracks, setTracks] = useState([]);
   const [selectedTrackId, setSelectedTrackId] = useState("");
   const [feedbackList, setFeedbackList] = useState([]);
   const [message, setMessage] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [isLoadingTracks, setIsLoadingTracks] = useState(false);
 
   const [generationForm, setGenerationForm] = useState({
-    user_id: 1,
     prompt: "Create a dreamy pop beat with soft vocals",
     genre: "pop",
     mood: "dreamy",
@@ -34,7 +37,6 @@ function App() {
   });
 
   const [feedbackForm, setFeedbackForm] = useState({
-    user_id: 1,
     rating: 5,
     comment: "",
     liked: true,
@@ -43,6 +45,25 @@ function App() {
     listen_count: 1,
     sentiment_score: 0.8,
   });
+
+  const [importForm, setImportForm] = useState({
+    query: "pop",
+    genre: "pop",
+    mood: "reference",
+    limit: 10,
+  });
+
+  if (loading) {
+    return (
+      <div className="loading-container">
+        <div className="loading-spinner">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthForm />;
+  }
 
   const selectedTrack = useMemo(
     () => tracks.find((track) => String(track.id) === String(selectedTrackId)),
@@ -54,7 +75,11 @@ function App() {
     setMessage("");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/tracks`);
+      const response = await fetch(`${API_BASE_URL}/tracks`, {
+        headers: {
+          ...getAuthHeaders(),
+        },
+      });
       if (!response.ok) {
         throw new Error("Could not load tracks.");
       }
@@ -79,7 +104,11 @@ function App() {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/tracks/${trackId}/feedback`);
+      const response = await fetch(`${API_BASE_URL}/tracks/${trackId}/feedback`, {
+        headers: {
+          ...getAuthHeaders(),
+        },
+      });
       if (!response.ok) {
         throw new Error("Could not load feedback.");
       }
@@ -112,6 +141,13 @@ function App() {
     }));
   }
 
+  function updateImportField(field, value) {
+    setImportForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
   async function handleGenerate(event) {
     event.preventDefault();
     setIsGenerating(true);
@@ -119,7 +155,6 @@ function App() {
 
     const payload = {
       ...generationForm,
-      user_id: Number(generationForm.user_id),
       tempo: generationForm.tempo ? Number(generationForm.tempo) : null,
       duration_seconds: Number(generationForm.duration_seconds),
     };
@@ -129,13 +164,14 @@ function App() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...getAuthHeaders(),
         },
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(data.detail || "Generation request failed.");
+        throw new Error(data.detail || "Couldn't generate");
       }
 
       setMessage(`Created track #${data.id}: ${data.title}`);
@@ -158,7 +194,6 @@ function App() {
 
     const payload = {
       ...feedbackForm,
-      user_id: Number(feedbackForm.user_id),
       rating: feedbackForm.rating ? Number(feedbackForm.rating) : null,
       listen_count: Number(feedbackForm.listen_count),
       sentiment_score: feedbackForm.sentiment_score
@@ -171,6 +206,7 @@ function App() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...getAuthHeaders(),
         },
         body: JSON.stringify(payload),
       });
@@ -188,36 +224,108 @@ function App() {
     }
   }
 
+  async function handleMusicBrainzImport(event) {
+    event.preventDefault();
+    setIsImporting(true);
+    setMessage("Importing MusicBrainz tracks...");
+
+    const payload = {
+      ...importForm,
+      limit: Number(importForm.limit),
+      genre: importForm.genre || null,
+      mood: importForm.mood || null,
+    };
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/tracks/import/musicbrainz`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.detail || "Could not import MusicBrainz tracks.");
+      }
+
+      setMessage(`Imported ${data.count} MusicBrainz tracks.`);
+      await fetchTracks();
+      if (data.tracks?.length > 0) {
+        setSelectedTrackId(String(data.tracks[0].id));
+      }
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
   return (
     <main className="app-shell">
       <section className="top-bar">
         <div>
           <p className="eyebrow">BeatsLuv</p>
-          <h1>API Tester</h1>
+          <h1>Music Generator</h1>
         </div>
-        <button type="button" onClick={fetchTracks} disabled={isLoadingTracks}>
-          {isLoadingTracks ? "Loading..." : "Refresh"}
-        </button>
+        <div className="user-actions">
+          <span className="user-info">Welcome, {user.email}</span>
+          <button type="button" onClick={fetchTracks} disabled={isLoadingTracks}>
+            {isLoadingTracks ? "Loading..." : "Refresh"}
+          </button>
+          <button type="button" onClick={logout} className="logout-button">
+            Logout
+          </button>
+        </div>
       </section>
 
       {message && <div className="status-message">{message}</div>}
+
+      <form className="metadata-toolbar" onSubmit={handleMusicBrainzImport}>
+        <label>
+          MusicBrainz Search
+          <input
+            value={importForm.query}
+            onChange={(event) => updateImportField("query", event.target.value)}
+          />
+        </label>
+        <label>
+          Genre
+          <input
+            value={importForm.genre}
+            onChange={(event) => updateImportField("genre", event.target.value)}
+          />
+        </label>
+        <label>
+          Mood
+          <input
+            value={importForm.mood}
+            onChange={(event) => updateImportField("mood", event.target.value)}
+          />
+        </label>
+        <label>
+          Count
+          <input
+            type="number"
+            min="1"
+            max="50"
+            value={importForm.limit}
+            onChange={(event) => updateImportField("limit", event.target.value)}
+          />
+        </label>
+        <button type="submit" disabled={isImporting}>
+          {isImporting ? "Importing..." : "Import Songs"}
+        </button>
+      </form>
 
       <section className="layout">
         <form className="panel" onSubmit={handleGenerate}>
           <div className="panel-heading">
             <h2>Generate Music</h2>
-            <span>POST /generation-requests</span>
+            <span>ACE-Step</span>
           </div>
-
-          <label>
-            User ID
-            <input
-              type="number"
-              min="1"
-              value={generationForm.user_id}
-              onChange={(event) => updateGenerationField("user_id", event.target.value)}
-            />
-          </label>
 
           <label>
             Prompt
@@ -275,7 +383,7 @@ function App() {
         <section className="panel">
           <div className="panel-heading">
             <h2>Tracks</h2>
-            <span>GET /tracks</span>
+            <span>Library</span>
           </div>
 
           <div className="track-list">
@@ -289,7 +397,9 @@ function App() {
                 onClick={() => setSelectedTrackId(String(track.id))}
               >
                 <strong>{track.title}</strong>
-                <span>#{track.id} · {track.status}</span>
+                <span>
+                  {track.artist ? `${track.artist} - ` : ""}#{track.id} - {track.status}
+                </span>
               </button>
             ))}
           </div>
@@ -300,7 +410,7 @@ function App() {
         <section className="panel">
           <div className="panel-heading">
             <h2>Selected Track</h2>
-            <span>GET /tracks/:id</span>
+            <span>Preview</span>
           </div>
 
           {!selectedTrack && <p className="empty-state">Select a track to inspect it.</p>}
@@ -317,6 +427,14 @@ function App() {
                   <dd>{selectedTrack.title}</dd>
                 </div>
                 <div>
+                  <dt>Artist</dt>
+                  <dd>{selectedTrack.artist || "N/A"}</dd>
+                </div>
+                <div>
+                  <dt>Album</dt>
+                  <dd>{selectedTrack.album || "N/A"}</dd>
+                </div>
+                <div>
                   <dt>Status</dt>
                   <dd>{selectedTrack.status}</dd>
                 </div>
@@ -325,8 +443,12 @@ function App() {
                   <dd>{selectedTrack.duration_seconds}s</dd>
                 </div>
                 <div>
-                  <dt>Score</dt>
-                  <dd>{selectedTrack.predicted_success_score ?? "N/A"}</dd>
+                  <dt>Source</dt>
+                  <dd>{selectedTrack.source || "ACE-Step"}</dd>
+                </div>
+                <div>
+                  <dt>Genre</dt>
+                  <dd>{selectedTrack.genre || "N/A"}</dd>
                 </div>
               </dl>
 
@@ -334,6 +456,11 @@ function App() {
               <a href={buildAudioUrl(selectedTrack.audio_url)} target="_blank" rel="noreferrer">
                 Open audio URL
               </a>
+              {selectedTrack.external_url && (
+                <a href={selectedTrack.external_url} target="_blank" rel="noreferrer">
+                  Open MusicBrainz page
+                </a>
+              )}
             </div>
           )}
         </section>
@@ -341,20 +468,10 @@ function App() {
         <form className="panel" onSubmit={handleFeedbackSubmit}>
           <div className="panel-heading">
             <h2>Feedback</h2>
-            <span>POST /tracks/:id/feedback</span>
+            <span>Listener notes</span>
           </div>
 
           <div className="form-grid">
-            <label>
-              User ID
-              <input
-                type="number"
-                min="1"
-                value={feedbackForm.user_id}
-                onChange={(event) => updateFeedbackField("user_id", event.target.value)}
-              />
-            </label>
-
             <label>
               Rating
               <input
@@ -432,13 +549,21 @@ function App() {
               <article key={item.id}>
                 <strong>Rating {item.rating ?? "N/A"}</strong>
                 <p>{item.comment || "No comment"}</p>
-                <span>{item.liked ? "Liked" : "Not liked"} · {item.listen_count} listens</span>
+                <span>{item.liked ? "Liked" : "Not liked"} - {item.listen_count} listens</span>
               </article>
             ))}
           </div>
         </form>
       </section>
     </main>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 

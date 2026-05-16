@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import feedback, generation_requests, tracks
+from app.routers import auth, feedback, generation_requests, tracks
 
 
 app = FastAPI(title="BeatsLuv API")
@@ -34,6 +34,7 @@ def health_check():
     return {"status": "ok", "message": "BeatsLuv API is running"}
 
 
+app.include_router(auth.router)
 app.include_router(tracks.router)
 app.include_router(generation_requests.router)
 app.include_router(feedback.router)

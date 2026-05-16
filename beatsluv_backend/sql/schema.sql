@@ -26,7 +26,13 @@ CREATE TABLE tracks (
     audio_url TEXT NOT NULL,
     duration_seconds INT NOT NULL,
     status VARCHAR(50) NOT NULL,
-    predicted_success_score FLOAT,
+    artist VARCHAR(255),
+    album VARCHAR(255),
+    release_date VARCHAR(50),
+    source VARCHAR(50),
+    external_id VARCHAR(255),
+    external_url TEXT,
+    genre VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (generation_request_id) REFERENCES generation_requests(id)
 );

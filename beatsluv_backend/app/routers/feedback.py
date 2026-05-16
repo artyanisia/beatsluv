@@ -1,8 +1,9 @@
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from app.auth import verify_token
 from app.database import get_connection
 
 
@@ -10,7 +11,6 @@ router = APIRouter(tags=["feedback"])
 
 
 class FeedbackCreate(BaseModel):
-    user_id: int
     rating: Optional[int] = None
     comment: Optional[str] = None
     liked: bool = False
@@ -21,7 +21,11 @@ class FeedbackCreate(BaseModel):
 
 
 @router.post("/tracks/{track_id}/feedback")
-def create_feedback(track_id: int, feedback: FeedbackCreate):
+def create_feedback(
+    track_id: int, 
+    feedback: FeedbackCreate, 
+    current_user: dict = Depends(verify_token)
+):
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -42,7 +46,7 @@ def create_feedback(track_id: int, feedback: FeedbackCreate):
                 """,
                 (
                     track_id,
-                    feedback.user_id,
+                    current_user["id"],
                     feedback.rating,
                     feedback.comment,
                     feedback.liked,

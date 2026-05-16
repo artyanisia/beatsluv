@@ -1,18 +1,19 @@
 # BeatsLuv Backend
 
-A beginner-friendly FastAPI backend for an AI music generation and analytics platform.
+FastAPI backend for generating music with a local ACE-Step server, importing MusicBrainz metadata, and storing tracks in PostgreSQL.
 
-This project uses:
+## What It Uses
 
 - Python
 - FastAPI
 - PostgreSQL
 - psycopg
 - python-dotenv
-- Hugging Face MusicGen
+- ACE-Step local API
+- MusicBrainz API for fake library seeding
 - Manual SQL queries
 
-It does not use SQLAlchemy, SQLModel, or Alembic.
+It does not use SQLAlchemy, SQLModel, Alembic, or third-party paid APIs.
 
 ## Project Structure
 
@@ -35,174 +36,89 @@ beatsluv_backend/
   README.md
 ```
 
-## 1. Create The Database
+## Setup
 
-Open PostgreSQL and create a database:
-
-```sql
-CREATE DATABASE beatsluv;
-```
-
-You can do this with `psql`:
-
-```bash
-psql -U postgres
-```
-
-Then inside `psql`:
+Create the database:
 
 ```sql
-CREATE DATABASE beatsluv;
-\q
+CREATE DATABASE beatsluv_db;
 ```
 
-## 2. Run The Schema
+Run the schema from the `beatsluv_backend` folder:
 
-From the `beatsluv_backend` folder, run:
-
-```bash
-psql -U postgres -d beatsluv -f sql/schema.sql
+```powershell
+psql -U postgres -p 5433 -d beatsluv_db -f sql/schema.sql
 ```
 
-This creates the tables:
-
-- `users`
-- `generation_requests`
-- `tracks`
-- `feedback`
-
-## 3. Create The `.env` File
-
-Copy `.env.example` to `.env`:
-
-```bash
-cp .env.example .env
-```
-
-On Windows PowerShell:
+Copy the environment file:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Example `.env` values:
+Example `.env`:
 
 ```env
-DATABASE_URL=postgresql://postgres:your_password@localhost:5432/beatsluv_db
-MOCK_AUDIO_URL=https://example.com/mock-track.mp3
-MUSIC_GENERATION_PROVIDER=local
-LOCAL_MUSICGEN_MODEL_ID=facebook/musicgen-small
-HUGGINGFACE_API_TOKEN=your_huggingface_token_here
-HUGGINGFACE_MODEL_ID=facebook/musicgen-large
-HUGGINGFACE_ENDPOINT_URL=
+DATABASE_URL=postgresql://postgres:your_password@localhost:5433/beatsluv_db
+ACESTEP_API_URL=http://127.0.0.1:7860
+ACESTEP_MODEL=acestep-v15-turbo
+ACESTEP_LM_MODEL_PATH=acestep-5Hz-lm-0.6B
+ACESTEP_LM_BACKEND=pt
+ACESTEP_AUDIO_FORMAT=wav
+ACESTEP_BATCH_SIZE=1
+ACESTEP_INFERENCE_STEPS=8
+MUSICBRAINZ_API_URL=https://musicbrainz.org/ws/2
+MUSICBRAINZ_USER_AGENT=BeatsLuv/1.0 (your-email@example.com)
+MUSICBRAINZ_FAKE_PREVIEW_SECONDS=10
 ```
 
-Update `your_password` with your local PostgreSQL password.
+If you already created the database before the MusicBrainz integration, run the additive metadata migration:
 
-`MUSIC_GENERATION_PROVIDER=local` makes the backend generate WAV files on your
-computer with AudioCraft MusicGen. The default `facebook/musicgen-small` model is
-the fastest option, but the first request can still take a while because the
-model weights must be downloaded and loaded.
-
-If local MusicGen fails, the backend automatically uses the mock fallback track.
-
-To use Hugging Face instead of local generation, set:
-
-```env
-MUSIC_GENERATION_PROVIDER=huggingface
+```powershell
+psql -U postgres -p 5433 -d beatsluv_db -f sql/add_musicbrainz_metadata.sql
 ```
-
-`HUGGINGFACE_API_TOKEN` is used only by the Hugging Face provider. If the token is
-missing or the external API fails, the backend automatically uses the mock
-fallback track.
-
-`facebook/musicgen-large` is a large 3.3B parameter model. For reliable API use,
-create a Hugging Face Inference Endpoint and paste its URL into:
-
-```env
-HUGGINGFACE_ENDPOINT_URL=https://your-endpoint.endpoints.huggingface.cloud
-```
-
-If `HUGGINGFACE_ENDPOINT_URL` is empty, the backend tries the general Hugging
-Face model inference URL for `HUGGINGFACE_MODEL_ID`.
-
-## 4. Install Requirements
 
 Create and activate a virtual environment:
 
-```bash
-python -m venv .venv
-```
-
-On macOS/Linux:
-
-```bash
-source .venv/bin/activate
-```
-
-On Windows PowerShell:
-
 ```powershell
+python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
-
-Install dependencies:
-
-```bash
 pip install -r requirements.txt
 ```
 
-AudioCraft is heavier than the rest of the backend dependencies. It works best
-with Python 3.10 or 3.11. If installation fails on Python 3.12, create the
-virtual environment with Python 3.10 and reinstall `requirements.txt`.
+Start ACE-Step with API routes enabled:
 
-## 5. Run The FastAPI Server
+```powershell
+cd D:\WORK-ANISIA\FACULTATE\Anul3-sem2\_ACE-Step-1.5
+powershell -ExecutionPolicy Bypass -File .\run_acestep_local.ps1
+```
 
-From the `beatsluv_backend` folder, run:
+Start the backend from the `beatsluv_backend` folder:
 
-```bash
+```powershell
 uvicorn app.main:app --reload
 ```
 
 Open:
 
 ```text
-http://127.0.0.1:8000
-```
-
-API docs:
-
-```text
 http://127.0.0.1:8000/docs
 ```
 
-## 6. Add A Test User
+## Test User
 
-The generation request endpoint needs a real `user_id`, because the database has foreign keys.
-
-Run this in `psql`:
+The generation endpoint needs a real `user_id` because of database foreign keys:
 
 ```sql
 INSERT INTO users (email, password_hash, role)
 VALUES ('test@example.com', 'not-a-real-hash-yet', 'USER');
 ```
 
-## Example API Calls
+## Generate A Track
 
-### Health Check
-
-```bash
-curl http://127.0.0.1:8000/
-```
-
-### Create A Generation Request
-
-This inserts a generation request, calls local MusicGen, creates a track, and
-returns the track. If local generation is not available, it returns a mock track.
-
-```bash
-curl -X POST http://127.0.0.1:8000/generation-requests \
-  -H "Content-Type: application/json" \
+```powershell
+curl -X POST http://127.0.0.1:8000/generation-requests `
+  -H "Content-Type: application/json" `
   -d '{
     "user_id": 1,
     "prompt": "Create a dreamy pop beat with soft vocals",
@@ -213,81 +129,35 @@ curl -X POST http://127.0.0.1:8000/generation-requests \
   }'
 ```
 
-When real generation succeeds, the returned `audio_url` looks like this:
+The backend calls ACE-Step, saves the generated audio under `generated_audio/`, creates a track row, and returns that track. If generation fails, the API returns `Couldn't generate`.
+
+## Import Fake Songs From MusicBrainz
+
+MusicBrainz imports do not need an API key, but they do require a meaningful `MUSICBRAINZ_USER_AGENT`. The importer makes one search request, creates local placeholder WAV previews under `generated_audio/`, and saves imported rows with artist, album, release date, source, genre, and MusicBrainz URL metadata.
+
+```powershell
+curl -X POST http://127.0.0.1:8000/tracks/import/musicbrainz `
+  -H "Content-Type: application/json" `
+  -H "Authorization: Bearer YOUR_TOKEN" `
+  -d '{
+    "query": "pop",
+    "genre": "pop",
+    "mood": "reference",
+    "limit": 10
+  }'
+```
+
+## Useful Endpoints
 
 ```text
-/generated-audio/generated-file-name.wav
-```
-
-You can open it from the running server:
-
-```text
-http://127.0.0.1:8000/generated-audio/generated-file-name.wav
-```
-
-### Get All Tracks
-
-```bash
-curl http://127.0.0.1:8000/tracks
-```
-
-### Get One Track
-
-```bash
-curl http://127.0.0.1:8000/tracks/1
-```
-
-### Create A Track Manually
-
-```bash
-curl -X POST http://127.0.0.1:8000/tracks \
-  -H "Content-Type: application/json" \
-  -d '{
-    "generation_request_id": 1,
-    "title": "Manual Track",
-    "audio_url": "https://example.com/manual-track.mp3",
-    "duration_seconds": 45,
-    "status": "READY",
-    "predicted_success_score": 0.7
-  }'
-```
-
-### Update A Track
-
-```bash
-curl -X PUT http://127.0.0.1:8000/tracks/1 \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Updated Track Title",
-    "status": "PUBLISHED"
-  }'
-```
-
-### Delete A Track
-
-```bash
-curl -X DELETE http://127.0.0.1:8000/tracks/1
-```
-
-### Add Feedback To A Track
-
-```bash
-curl -X POST http://127.0.0.1:8000/tracks/1/feedback \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": 1,
-    "rating": 5,
-    "comment": "Great beat!",
-    "liked": true,
-    "downloaded": true,
-    "shared": false,
-    "listen_count": 3,
-    "sentiment_score": 0.9
-  }'
-```
-
-### Get Feedback For A Track
-
-```bash
-curl http://127.0.0.1:8000/tracks/1/feedback
+GET    /
+POST   /generation-requests
+GET    /tracks
+GET    /tracks/{track_id}
+POST   /tracks
+POST   /tracks/import/musicbrainz
+PUT    /tracks/{track_id}
+DELETE /tracks/{track_id}
+POST   /tracks/{track_id}/feedback
+GET    /tracks/{track_id}/feedback
 ```

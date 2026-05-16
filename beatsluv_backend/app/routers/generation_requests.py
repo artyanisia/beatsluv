@@ -1,17 +1,17 @@
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
+from app.auth import verify_token
 from app.database import get_connection
-from app.services.music_generator import MusicGeneratorService
+from app.services.music_generator import MusicGenerationError, MusicGeneratorService
 
 
 router = APIRouter(prefix="/generation-requests", tags=["generation requests"])
 
 
 class GenerationRequestCreate(BaseModel):
-    user_id: int
     prompt: str
     genre: Optional[str] = None
     mood: Optional[str] = None
@@ -20,12 +20,12 @@ class GenerationRequestCreate(BaseModel):
 
 
 @router.post("")
-def create_generation_request(request: GenerationRequestCreate):
+def create_generation_request(
+    request: GenerationRequestCreate, 
+    current_user: dict = Depends(verify_token)
+):
     """
-    Create a generation request, try to generate music, then save a track.
-
-    The external AI call is intentionally a placeholder for now. If it fails,
-    the service returns a mock track so the backend can still be tested.
+    Create a generation request, generate music, then save a track.
     """
     generator = MusicGeneratorService()
 
@@ -46,7 +46,7 @@ def create_generation_request(request: GenerationRequestCreate):
                 RETURNING *;
                 """,
                 (
-                    request.user_id,
+                    current_user["id"],
                     request.prompt,
                     request.genre,
                     request.mood,
@@ -57,15 +57,27 @@ def create_generation_request(request: GenerationRequestCreate):
             )
             generation_request = cur.fetchone()
 
-            generated_track = generator.generate_track(
-                prompt=request.prompt,
-                genre=request.genre,
-                mood=request.mood,
-                tempo=request.tempo,
-                duration_seconds=request.duration_seconds,
-            )
+            try:
+                generated_track = generator.generate_track(
+                    prompt=request.prompt,
+                    genre=request.genre,
+                    mood=request.mood,
+                    tempo=request.tempo,
+                    duration_seconds=request.duration_seconds,
+                )
+            except MusicGenerationError as exc:
+                cur.execute(
+                    """
+                    UPDATE generation_requests
+                    SET status = %s
+                    WHERE id = %s;
+                    """,
+                    ("FAILED", generation_request["id"]),
+                )
+                conn.commit()
+                raise HTTPException(status_code=502, detail="Couldn't generate") from exc
 
-            request_status = "COMPLETED_MOCK" if generated_track["is_mock"] else "COMPLETED"
+            request_status = "COMPLETED"
 
             cur.execute(
                 """
@@ -74,10 +86,9 @@ def create_generation_request(request: GenerationRequestCreate):
                     title,
                     audio_url,
                     duration_seconds,
-                    status,
-                    predicted_success_score
+                    status
                 )
-                VALUES (%s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING *;
                 """,
                 (
@@ -86,7 +97,6 @@ def create_generation_request(request: GenerationRequestCreate):
                     generated_track["audio_url"],
                     generated_track["duration_seconds"],
                     request_status,
-                    generated_track.get("predicted_success_score"),
                 ),
             )
             track = cur.fetchone()
