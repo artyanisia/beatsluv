@@ -22,7 +22,9 @@ def ensure_track_analytics_columns(conn):
             ADD COLUMN IF NOT EXISTS prompt TEXT,
             ADD COLUMN IF NOT EXISTS genre VARCHAR(100),
             ADD COLUMN IF NOT EXISTS mood VARCHAR(100),
-            ADD COLUMN IF NOT EXISTS tempo INT;
+            ADD COLUMN IF NOT EXISTS tempo INT,
+            ADD COLUMN IF NOT EXISTS ai_temperature NUMERIC(3, 2),
+            ADD COLUMN IF NOT EXISTS key_signature VARCHAR(20);
             """
         )
 
@@ -32,6 +34,8 @@ class GenerationRequestCreate(BaseModel):
     genre: Optional[str] = None
     mood: Optional[str] = None
     tempo: Optional[int] = None
+    ai_temperature: Optional[float] = 0.7
+    key_signature: Optional[str] = None
     duration_seconds: int = 30
 
 
@@ -56,6 +60,8 @@ def create_generation_request(
                     genre,
                     mood,
                     tempo,
+                    ai_temperature,
+                    key_signature,
                     duration_seconds,
                     status
                 )
@@ -68,6 +74,8 @@ def create_generation_request(
                     request.genre,
                     request.mood,
                     request.tempo,
+                    request.ai_temperature,
+                    request.key_signature,
                     request.duration_seconds,
                     "PROCESSING",
                 ),
@@ -109,9 +117,11 @@ def create_generation_request(
                     prompt,
                     genre,
                     mood,
-                    tempo
+                    tempo,
+                    ai_temperature,
+                    key_signature
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING *;
                 """,
                 (
@@ -125,6 +135,8 @@ def create_generation_request(
                     request.genre,
                     request.mood,
                     request.tempo,
+                    request.ai_temperature,
+                    request.key_signature,
                 ),
             )
             track = cur.fetchone()

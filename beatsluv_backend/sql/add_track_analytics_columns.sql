@@ -10,7 +10,9 @@ ADD COLUMN IF NOT EXISTS external_id VARCHAR(255),
 ADD COLUMN IF NOT EXISTS external_url TEXT,
 ADD COLUMN IF NOT EXISTS genre VARCHAR(100),
 ADD COLUMN IF NOT EXISTS mood VARCHAR(100),
-ADD COLUMN IF NOT EXISTS tempo INT;
+ADD COLUMN IF NOT EXISTS tempo INT,
+ADD COLUMN IF NOT EXISTS ai_temperature NUMERIC(3, 2),
+ADD COLUMN IF NOT EXISTS key_signature VARCHAR(20);
 
 UPDATE tracks t
 SET user_id = gr.user_id,
@@ -21,8 +23,3 @@ SET user_id = gr.user_id,
 FROM generation_requests gr
 WHERE t.generation_request_id = gr.id
   AND (t.user_id IS NULL OR t.prompt IS NULL OR t.genre IS NULL OR t.mood IS NULL OR t.tempo IS NULL);
-
-UPDATE tracks
-SET audio_url = NULL
-WHERE source = 'MusicBrainz'
-  AND audio_url = '/generated-audio/musicbrainz_preview.wav';

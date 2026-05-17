@@ -17,7 +17,8 @@ body {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
@@ -37,7 +38,8 @@ button:disabled {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   border: 1px solid #cfc7b6;
   border-radius: 6px;
@@ -680,6 +682,101 @@ dd {
 
 .engagement-stat strong {
   color: #1e4d45;
+}
+
+.compact-form {
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  margin-bottom: 1rem;
+}
+
+.prediction-result {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 1rem;
+  padding: 0.9rem;
+  background: #f8f6f0;
+  border: 1px solid #e8e3d9;
+  border-radius: 6px;
+}
+
+.prediction-result strong {
+  color: #1e4d45;
+}
+
+.prediction-result span {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+/* Admin */
+.admin-page {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.admin-toolbar,
+.admin-search {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.admin-search input {
+  max-width: 420px;
+}
+
+.admin-section {
+  overflow: hidden;
+}
+
+.admin-table {
+  display: grid;
+  gap: 0.5rem;
+  overflow-x: auto;
+}
+
+.admin-row {
+  display: grid;
+  grid-template-columns: 72px minmax(220px, 1.6fr) 140px 120px 120px 100px 90px 100px;
+  gap: 0.7rem;
+  align-items: center;
+  min-width: 980px;
+  border: 1px solid #ebe5d8;
+  border-radius: 6px;
+  background: #fffdf8;
+  padding: 0.65rem;
+}
+
+.users-table .admin-row {
+  grid-template-columns: 72px minmax(260px, 1fr) 140px 100px 100px;
+  min-width: 720px;
+}
+
+.feedback-table .admin-row {
+  grid-template-columns: 72px minmax(220px, 1fr) minmax(220px, 1fr) 80px minmax(240px, 1fr) 100px;
+  min-width: 980px;
+}
+
+.admin-row-header {
+  background: #e5f0ec;
+  color: #1e4d45;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.admin-row span {
+  overflow-wrap: anywhere;
+}
+
+.danger-button {
+  background: #a73728;
+}
+
+.danger-button:hover:not(:disabled) {
+  background: #84291f;
 }
 
 /* Dashboard Footer */

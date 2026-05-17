@@ -22,46 +22,6 @@ To start everything without opening the browser:
 powershell -ExecutionPolicy Bypass -File .\start_project.ps1 -NoBrowser
 ```
 
-## Seed MusicBrainz Demo Data
-
-From the `beatsluv_backend` folder, import real MusicBrainz track metadata into PostgreSQL:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\seed_musicbrainz_tracks.py --count 500
-```
-
-This creates metadata-only imported tracks without running ACE-Step generation. The seeder fetches real titles, artists, albums, durations, release dates, and MusicBrainz links, then saves the analytics fields used by the app: `prompt`, `genre`, `mood`, `tempo`, `duration_seconds`, and `user_id`. Imported MusicBrainz rows do not have an `audio_url`; only ACE-Step generations have playable audio files. The seeder respects MusicBrainz's public API pace by waiting between requests and skips tracks already imported from MusicBrainz.
-
-Useful variants:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\seed_musicbrainz_tracks.py --count 100 --dry-run
-.\.venv\Scripts\python.exe scripts\seed_musicbrainz_tracks.py --count 300 --query blues=blues --query reggae=reggae
-```
-
-## Seed Jamendo Tracks With Audio
-
-Jamendo provides real playable MP3 URLs. Add a Jamendo client id to `.env`:
-
-```env
-JAMENDO_CLIENT_ID=your_jamendo_client_id
-```
-
-Then import tracks from the `beatsluv_backend` folder:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\seed_jamendo_tracks.py --count 300
-```
-
-Useful variants:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\seed_jamendo_tracks.py --count 50 --dry-run
-.\.venv\Scripts\python.exe scripts\seed_jamendo_tracks.py --count 500 --tag reggae --tag blues
-```
-
-FastAPI backend for generating music with a local ACE-Step server, importing MusicBrainz metadata, and storing tracks in PostgreSQL.
-
 ## What It Uses
 
 - Python
@@ -70,31 +30,11 @@ FastAPI backend for generating music with a local ACE-Step server, importing Mus
 - psycopg
 - python-dotenv
 - ACE-Step local API
-- MusicBrainz API for fake library seeding
+- Jamendo API for demo tracks with playable audio
+- Scikit-learn for popularity prediction
 - Manual SQL queries
 
-It does not use SQLAlchemy, SQLModel, Alembic, or third-party paid APIs.
-
-## Project Structure
-
-```text
-beatsluv_backend/
-  app/
-    main.py
-    database.py
-    routers/
-      generation_requests.py
-      tracks.py
-      feedback.py
-    services/
-      music_generator.py
-  generated_audio/
-  sql/
-    schema.sql
-  requirements.txt
-  .env.example
-  README.md
-```
+The backend does not use SQLAlchemy, SQLModel, or Alembic.
 
 ## Setup
 
@@ -108,6 +48,12 @@ Run the schema from the `beatsluv_backend` folder:
 
 ```powershell
 psql -U postgres -p 5433 -d beatsluv_db -f sql/schema.sql
+```
+
+If you already have an older database and only need the analytics columns:
+
+```powershell
+psql -U postgres -p 5433 -d beatsluv_db -f sql/add_track_analytics_columns.sql
 ```
 
 Copy the environment file:
@@ -127,15 +73,7 @@ ACESTEP_LM_BACKEND=pt
 ACESTEP_AUDIO_FORMAT=wav
 ACESTEP_BATCH_SIZE=1
 ACESTEP_INFERENCE_STEPS=8
-MUSICBRAINZ_API_URL=https://musicbrainz.org/ws/2
-MUSICBRAINZ_USER_AGENT=BeatsLuv/1.0 (your-email@example.com)
-MUSICBRAINZ_FAKE_PREVIEW_SECONDS=10
-```
-
-If you already created the database before the MusicBrainz integration, run the additive metadata migration:
-
-```powershell
-psql -U postgres -p 5433 -d beatsluv_db -f sql/add_musicbrainz_metadata.sql
+JAMENDO_CLIENT_ID=your_jamendo_client_id
 ```
 
 Create and activate a virtual environment:
@@ -146,38 +84,47 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Start ACE-Step with API routes enabled:
+## Demo Data
+
+To add a larger song library with playable audio URLs:
 
 ```powershell
-cd D:\WORK-ANISIA\FACULTATE\Anul3-sem2\_ACE-Step-1.5
-powershell -ExecutionPolicy Bypass -File .\run_acestep_local.ps1
+.\.venv\Scripts\python.exe scripts\seed_jamendo_tracks.py --count 300
 ```
 
-Start the backend from the `beatsluv_backend` folder:
+Useful variants:
 
 ```powershell
-uvicorn app.main:app --reload
+.\.venv\Scripts\python.exe scripts\seed_jamendo_tracks.py --count 50 --dry-run
+.\.venv\Scripts\python.exe scripts\seed_jamendo_tracks.py --count 500 --tag reggae --tag blues
 ```
 
-Open:
+If the database does not have enough feedback rows for analytics and prediction:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\seed_demo_feedback.py --per-track 3
+```
+
+## Analytics And Prediction
+
+The dashboard uses SQL analytics endpoints under `/analytics` for descriptive statistics:
+
+- `/analytics/genre-distribution`
+- `/analytics/key-distribution`
+- `/analytics/duration-analysis`
+- `/analytics/ai-performance`
+- `/analytics/monthly-evolution`
+
+The prediction module uses Scikit-learn `RandomForestRegressor` and the local database feedback data:
 
 ```text
-http://127.0.0.1:8000/docs
-```
-
-## Test User
-
-The generation endpoint needs a real `user_id` because of database foreign keys:
-
-```sql
-INSERT INTO users (email, password_hash, role)
-VALUES ('test@example.com', 'not-a-real-hash-yet', 'USER');
+POST /predictions/popularity
 ```
 
 ## Generate A Track
 
 ```powershell
-curl -X POST http://127.0.0.1:8000/generation-requests `
+curl -X POST http://127.0.0.1:8001/generation-requests `
   -H "Content-Type: application/json" `
   -d '{
     "user_id": 1,
@@ -189,35 +136,33 @@ curl -X POST http://127.0.0.1:8000/generation-requests `
   }'
 ```
 
-The backend calls ACE-Step, saves the generated audio under `generated_audio/`, creates a track row, and returns that track. If generation fails, the API returns `Couldn't generate`.
+The backend calls ACE-Step, saves the generated audio under `generated_audio/`, creates a track row, and returns that track.
 
-## Import Fake Songs From MusicBrainz
+## Admin
 
-MusicBrainz imports do not need an API key, but they do require a meaningful `MUSICBRAINZ_USER_AGENT`. The importer makes one search request, creates local placeholder WAV previews under `generated_audio/`, and saves imported rows with artist, album, release date, source, genre, and MusicBrainz URL metadata.
+Only this account can access the admin page:
 
-```powershell
-curl -X POST http://127.0.0.1:8000/tracks/import/musicbrainz `
-  -H "Content-Type: application/json" `
-  -H "Authorization: Bearer YOUR_TOKEN" `
-  -d '{
-    "query": "pop",
-    "genre": "pop",
-    "mood": "reference",
-    "limit": 10
-  }'
+```text
+admin@gmail.com
 ```
+
+The frontend hides the Admin tab for other users, and the backend rejects admin API requests unless the logged-in user has role `ADMIN` and email `admin@gmail.com`.
 
 ## Useful Endpoints
 
 ```text
 GET    /
+POST   /auth/register
+POST   /auth/login
 POST   /generation-requests
 GET    /tracks
 GET    /tracks/{track_id}
 POST   /tracks
-POST   /tracks/import/musicbrainz
 PUT    /tracks/{track_id}
 DELETE /tracks/{track_id}
 POST   /tracks/{track_id}/feedback
 GET    /tracks/{track_id}/feedback
+GET    /analytics/*
+POST   /predictions/popularity
+GET    /admin/*
 ```

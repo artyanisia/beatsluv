@@ -5,7 +5,6 @@ from pydantic import BaseModel
 
 from app.auth import verify_token
 from app.database import get_connection
-from app.services.musicbrainz_importer import MusicBrainzImporter, MusicBrainzImportError
 
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
@@ -48,13 +47,6 @@ class TrackUpdate(BaseModel):
     tempo: Optional[int] = None
 
 
-class MusicBrainzImportRequest(BaseModel):
-    query: str = "pop"
-    limit: int = 10
-    genre: Optional[str] = None
-    mood: Optional[str] = "reference"
-
-
 def ensure_track_metadata_columns(conn):
     with conn.cursor() as cur:
         cur.execute(
@@ -71,7 +63,9 @@ def ensure_track_metadata_columns(conn):
             ADD COLUMN IF NOT EXISTS external_url TEXT,
             ADD COLUMN IF NOT EXISTS genre VARCHAR(100),
             ADD COLUMN IF NOT EXISTS mood VARCHAR(100),
-            ADD COLUMN IF NOT EXISTS tempo INT;
+            ADD COLUMN IF NOT EXISTS tempo INT,
+            ADD COLUMN IF NOT EXISTS ai_temperature NUMERIC(3, 2),
+            ADD COLUMN IF NOT EXISTS key_signature VARCHAR(20);
             """
         )
 
@@ -229,117 +223,6 @@ def update_track(track_id: int, track: TrackUpdate):
             conn.commit()
 
     return updated_track
-
-
-@router.post("/import/musicbrainz")
-def import_musicbrainz_tracks(
-    request: MusicBrainzImportRequest,
-    current_user: dict = Depends(verify_token),
-):
-    importer = MusicBrainzImporter()
-
-    try:
-        imported_tracks = importer.search_tracks(
-            query=request.query,
-            limit=request.limit,
-            genre=request.genre,
-        )
-    except MusicBrainzImportError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-
-    with get_connection() as conn:
-        ensure_track_metadata_columns(conn)
-        created_tracks = []
-
-        with conn.cursor() as cur:
-            for imported_track in imported_tracks:
-                prompt = self_contained_import_prompt(imported_track)
-                cur.execute(
-                    """
-                    INSERT INTO generation_requests (
-                        user_id,
-                        prompt,
-                        genre,
-                        mood,
-                        tempo,
-                        duration_seconds,
-                        status
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    RETURNING *;
-                    """,
-                    (
-                        current_user["id"],
-                        prompt,
-                        imported_track.genre,
-                        request.mood or imported_track.mood,
-                        imported_track.tempo,
-                        imported_track.duration_seconds,
-                        "IMPORTED",
-                    ),
-                )
-                generation_request = cur.fetchone()
-
-                cur.execute(
-                    """
-                    INSERT INTO tracks (
-                        generation_request_id,
-                        title,
-                        audio_url,
-                        duration_seconds,
-                        status,
-                        user_id,
-                        prompt,
-                        artist,
-                        album,
-                        release_date,
-                        source,
-                        external_id,
-                        external_url,
-                        genre,
-                        mood,
-                        tempo
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    RETURNING *;
-                    """,
-                    (
-                        generation_request["id"],
-                        imported_track.title,
-                        None,
-                        imported_track.duration_seconds,
-                        "IMPORTED",
-                        current_user["id"],
-                        prompt,
-                        imported_track.artist,
-                        imported_track.album,
-                        imported_track.release_date,
-                        "MusicBrainz",
-                        imported_track.external_id,
-                        imported_track.external_url,
-                        imported_track.genre,
-                        request.mood or imported_track.mood,
-                        imported_track.tempo,
-                    ),
-                )
-                created_tracks.append(cur.fetchone())
-
-            conn.commit()
-
-    return {
-        "source": "MusicBrainz",
-        "count": len(created_tracks),
-        "tracks": created_tracks,
-    }
-
-
-def self_contained_import_prompt(imported_track):
-    parts = [f"Imported MusicBrainz recording: {imported_track.title}"]
-    if imported_track.artist:
-        parts.append(f"by {imported_track.artist}")
-    if imported_track.album:
-        parts.append(f"from {imported_track.album}")
-    return " ".join(parts)
 
 
 @router.delete("/{track_id}")

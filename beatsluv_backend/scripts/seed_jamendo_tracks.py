@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import sys
 import time
 from pathlib import Path
@@ -17,6 +18,7 @@ from app.services.jamendo_importer import JamendoImporter, JamendoImportError  #
 
 
 DEFAULT_TAGS = ["rock", "pop", "jazz", "hiphop", "electronic", "classical", "metal", "folk", "dance"]
+KEY_SIGNATURES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"]
 
 
 def parse_args():
@@ -48,7 +50,9 @@ def ensure_track_columns(conn):
             ADD COLUMN IF NOT EXISTS external_url TEXT,
             ADD COLUMN IF NOT EXISTS genre VARCHAR(100),
             ADD COLUMN IF NOT EXISTS mood VARCHAR(100),
-            ADD COLUMN IF NOT EXISTS tempo INT;
+            ADD COLUMN IF NOT EXISTS tempo INT,
+            ADD COLUMN IF NOT EXISTS ai_temperature NUMERIC(3, 2),
+            ADD COLUMN IF NOT EXISTS key_signature VARCHAR(20);
             """
         )
         conn.commit()
@@ -88,6 +92,8 @@ def fetch_existing_jamendo_ids(conn):
 
 def insert_jamendo_track(conn, user_id: int, track):
     prompt = build_generated_prompt(track)
+    ai_temperature = infer_temperature(track.external_id)
+    key_signature = infer_key_signature(track.external_id)
 
     with conn.cursor() as cur:
         cur.execute(
@@ -98,10 +104,12 @@ def insert_jamendo_track(conn, user_id: int, track):
                 genre,
                 mood,
                 tempo,
+                ai_temperature,
+                key_signature,
                 duration_seconds,
                 status
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id;
             """,
             (
@@ -110,6 +118,8 @@ def insert_jamendo_track(conn, user_id: int, track):
                 track.genre,
                 track.mood,
                 track.tempo,
+                ai_temperature,
+                key_signature,
                 track.duration_seconds,
                 "COMPLETED",
             ),
@@ -134,9 +144,11 @@ def insert_jamendo_track(conn, user_id: int, track):
                 external_url,
                 genre,
                 mood,
-                tempo
+                tempo,
+                ai_temperature,
+                key_signature
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id;
             """,
             (
@@ -156,6 +168,8 @@ def insert_jamendo_track(conn, user_id: int, track):
                 track.genre,
                 track.mood,
                 track.tempo,
+                ai_temperature,
+                key_signature,
             ),
         )
         return cur.fetchone()["id"]
@@ -175,6 +189,17 @@ def build_generated_prompt(track):
         parts.append(f"around {track.tempo} BPM")
     parts.append(f"for {track.duration_seconds} seconds")
     return " ".join(parts)
+
+
+def infer_temperature(track_id):
+    seed = int(hashlib.sha256(str(track_id).encode("utf-8")).hexdigest()[:8], 16)
+    return round(0.2 + (seed % 80) / 100, 2)
+
+
+def infer_key_signature(track_id):
+    seed = int(hashlib.sha256(str(track_id).encode("utf-8")).hexdigest()[:8], 16)
+    mode = "major" if seed % 2 == 0 else "minor"
+    return f"{KEY_SIGNATURES[seed % len(KEY_SIGNATURES)]} {mode}"
 
 
 def main():

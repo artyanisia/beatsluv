@@ -4,8 +4,9 @@ import "./styles.css";
 import { AuthProvider, useAuth } from "./AuthContext";
 import AuthForm from "./AuthForm";
 import Dashboard from "./Dashboard";
+import AdminPage from "./Admin";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
 
 function buildAudioUrl(audioUrl) {
   if (!audioUrl) {
@@ -21,9 +22,7 @@ function buildAudioUrl(audioUrl) {
 
 function AppContent() {
   const { user, logout, getAuthHeaders, loading } = useAuth();
-  
-  // Debug logging
-  console.log('AppContent render - user:', user, 'loading:', loading);
+  const isAdmin = user?.role === "ADMIN" && user?.email === "admin@gmail.com";
   
   const [tracks, setTracks] = useState([]);
   const [selectedTrackId, setSelectedTrackId] = useState("");
@@ -32,8 +31,7 @@ function AppContent() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isLoadingTracks, setIsLoadingTracks] = useState(false);
   
-  // Navigation state
-  const [currentView, setCurrentView] = useState('generator'); // 'generator' or 'dashboard'
+  const [currentView, setCurrentView] = useState('generator');
 
   const [generationForm, setGenerationForm] = useState({
     prompt: "Create a dreamy pop beat with soft vocals",
@@ -234,7 +232,13 @@ function AppContent() {
       <section className="top-bar">
         <div>
           <p className="eyebrow">BeatsLuv</p>
-          <h1>{currentView === 'dashboard' ? 'Analytics Dashboard' : 'Music Generator'}</h1>
+          <h1>
+            {currentView === 'dashboard'
+              ? 'Analytics Dashboard'
+              : currentView === 'admin'
+                ? 'Admin Management'
+                : 'Music Generator'}
+          </h1>
         </div>
         <div className="nav-actions">
           <button 
@@ -251,6 +255,15 @@ function AppContent() {
           >
             Dashboard
           </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setCurrentView('admin')}
+              className={currentView === 'admin' ? 'nav-button active' : 'nav-button'}
+            >
+              Admin
+            </button>
+          )}
         </div>
         <div className="user-actions">
           <span className="user-info">Welcome, {user.email}</span>
@@ -267,9 +280,10 @@ function AppContent() {
 
       {message && <div className="status-message">{message}</div>}
       
-      {/* Conditional rendering based on current view */}
       {currentView === 'dashboard' ? (
         <Dashboard />
+      ) : currentView === 'admin' ? (
+        <AdminPage />
       ) : (
         <>
           <section className="layout">
@@ -527,10 +541,8 @@ try {
     throw new Error("Root element not found");
   }
   
-  console.log("Starting BeatsLuv app...");
   const root = createRoot(rootElement);
   root.render(<App />);
-  console.log("App rendered successfully");
 } catch (error) {
   console.error("Failed to render app:", error);
   document.body.innerHTML = `<div style="padding: 20px; color: red;"><h2>Error loading BeatsLuv</h2><p>${error.message}</p><p>Check browser console for more details</p></div>`;

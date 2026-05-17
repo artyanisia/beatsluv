@@ -13,6 +13,8 @@ CREATE TABLE generation_requests (
     genre VARCHAR(100),
     mood VARCHAR(100),
     tempo INT,
+    ai_temperature NUMERIC(3, 2),
+    key_signature VARCHAR(20),
     duration_seconds INT NOT NULL,
     status VARCHAR(50) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -37,6 +39,8 @@ CREATE TABLE tracks (
     genre VARCHAR(100),
     mood VARCHAR(100),
     tempo INT,
+    ai_temperature NUMERIC(3, 2),
+    key_signature VARCHAR(20),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (generation_request_id) REFERENCES generation_requests(id),
     FOREIGN KEY (user_id) REFERENCES users(id)

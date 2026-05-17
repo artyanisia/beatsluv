@@ -15,7 +15,7 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
 
-  const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+  const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
 
   const getErrorMessage = async (response, fallback) => {
     const text = await response.text();
@@ -74,7 +74,6 @@ export const AuthProvider = ({ children }) => {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('Login successful, user data:', data);
         setToken(data.access_token);
         setUser(data.user);
         localStorage.setItem('token', data.access_token);
@@ -113,7 +112,6 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (response.ok) {
-        const userData = await response.json();
         // Auto-login after signup
         const loginResult = await login(email, password);
         return loginResult;

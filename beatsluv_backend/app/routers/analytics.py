@@ -1,361 +1,473 @@
-from typing import List, Dict, Any
 from fastapi import APIRouter, Depends
 
 from app.auth import verify_token
-from app.database import get_db_connection
+from app.database import get_connection
+
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
+def scalar(cur, query, params=None, default=0):
+    cur.execute(query, params or ())
+    row = cur.fetchone()
+    if not row:
+        return default
+    value = next(iter(row.values())) if isinstance(row, dict) else row[0]
+    return value if value is not None else default
+
+
 @router.get("/overview")
-async def get_overview_stats(current_user: dict = Depends(verify_token)):
-    """Get overview statistics for the dashboard."""
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cursor:
-            # Total tracks
-            cursor.execute("SELECT COUNT(*) FROM tracks")
-            total_tracks = cursor.fetchone()[0]
-            
-            # Total users
-            cursor.execute("SELECT COUNT(*) FROM users")
-            total_users = cursor.fetchone()[0]
-            
-            # Total feedback entries
-            cursor.execute("SELECT COUNT(*) FROM feedback")
-            total_feedback = cursor.fetchone()[0]
-            
-            # Average rating
-            cursor.execute("SELECT AVG(rating) FROM feedback WHERE rating IS NOT NULL")
-            avg_rating_result = cursor.fetchone()
-            avg_rating = round(avg_rating_result[0], 2) if avg_rating_result[0] else 0
-            
-            # Most recent tracks
-            cursor.execute("""
-                SELECT id, title, genre, mood, created_at 
-                FROM tracks 
-                ORDER BY created_at DESC 
-                LIMIT 5
-            """)
+def get_overview_stats(current_user: dict = Depends(verify_token)):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            total_tracks = scalar(cur, "SELECT COUNT(*) FROM tracks;")
+            total_users = scalar(cur, "SELECT COUNT(*) FROM users;")
+            total_feedback = scalar(cur, "SELECT COUNT(*) FROM feedback;")
+            avg_rating = scalar(cur, "SELECT ROUND(AVG(rating)::numeric, 2) FROM feedback WHERE rating IS NOT NULL;")
+            avg_duration = scalar(
+                cur,
+                "SELECT ROUND(AVG(duration_seconds)::numeric, 1) FROM tracks WHERE duration_seconds IS NOT NULL;",
+            )
+            playable_tracks = scalar(cur, "SELECT COUNT(*) FROM tracks WHERE audio_url IS NOT NULL;")
+
+            cur.execute(
+                """
+                SELECT id, title, genre, mood, tempo, duration_seconds, created_at
+                FROM tracks
+                ORDER BY created_at DESC, id DESC
+                LIMIT 8;
+                """
+            )
             recent_tracks = [
                 {
-                    "id": row[0],
-                    "title": row[1],
-                    "genre": row[2],
-                    "mood": row[3],
-                    "created_at": row[4].isoformat() if row[4] else None
+                    "id": row["id"],
+                    "title": row["title"],
+                    "genre": row["genre"] or "Unknown",
+                    "mood": row["mood"] or "Unknown",
+                    "tempo": row["tempo"],
+                    "duration_seconds": row["duration_seconds"],
+                    "created_at": row["created_at"].isoformat() if row["created_at"] else None,
                 }
-                for row in cursor.fetchall()
+                for row in cur.fetchall()
             ]
-            
+
             return {
                 "total_tracks": total_tracks,
                 "total_users": total_users,
                 "total_feedback": total_feedback,
-                "avg_rating": avg_rating,
-                "recent_tracks": recent_tracks
+                "avg_rating": float(avg_rating or 0),
+                "avg_duration": float(avg_duration or 0),
+                "playable_tracks": playable_tracks,
+                "recent_tracks": recent_tracks,
             }
-    finally:
-        conn.close()
 
 
 @router.get("/genre-distribution")
-async def get_genre_distribution(current_user: dict = Depends(verify_token)):
-    """Get distribution of tracks by genre."""
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("""
-                SELECT 
-                    COALESCE(genre, 'Unknown') as genre,
-                    COUNT(*) as count,
-                    AVG(duration_seconds) as avg_duration
-                FROM tracks 
-                GROUP BY genre 
-                ORDER BY count DESC
-            """)
-            
+def get_genre_distribution(current_user: dict = Depends(verify_token)):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(NULLIF(TRIM(genre), ''), 'Unknown') AS genre,
+                    COUNT(*) AS count,
+                    ROUND(AVG(duration_seconds)::numeric, 1) AS avg_duration,
+                    ROUND(AVG(tempo)::numeric, 1) AS avg_tempo
+                FROM tracks
+                GROUP BY COALESCE(NULLIF(TRIM(genre), ''), 'Unknown')
+                ORDER BY count DESC, genre ASC;
+                """
+            )
             return [
                 {
-                    "genre": row[0],
-                    "count": row[1],
-                    "avg_duration": round(row[2], 1) if row[2] else 0
+                    "genre": row["genre"],
+                    "count": row["count"],
+                    "avg_duration": float(row["avg_duration"] or 0),
+                    "avg_tempo": float(row["avg_tempo"] or 0),
                 }
-                for row in cursor.fetchall()
+                for row in cur.fetchall()
             ]
-    finally:
-        conn.close()
 
 
 @router.get("/mood-analysis")
-async def get_mood_analysis(current_user: dict = Depends(verify_token)):
-    """Get analysis of tracks by mood."""
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("""
-                SELECT 
-                    COALESCE(mood, 'Unknown') as mood,
-                    COUNT(*) as count,
-                    AVG(COALESCE(tempo, 0)) as avg_tempo
-                FROM tracks 
-                GROUP BY mood 
-                ORDER BY count DESC
-            """)
-            
+def get_mood_analysis(current_user: dict = Depends(verify_token)):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(NULLIF(TRIM(mood), ''), 'Unknown') AS mood,
+                    COUNT(*) AS count,
+                    ROUND(AVG(tempo)::numeric, 1) AS avg_tempo,
+                    ROUND(AVG(duration_seconds)::numeric, 1) AS avg_duration
+                FROM tracks
+                GROUP BY COALESCE(NULLIF(TRIM(mood), ''), 'Unknown')
+                ORDER BY count DESC, mood ASC;
+                """
+            )
             return [
                 {
-                    "mood": row[0],
-                    "count": row[1],
-                    "avg_tempo": round(row[2], 1) if row[2] else 0
+                    "mood": row["mood"],
+                    "count": row["count"],
+                    "avg_tempo": float(row["avg_tempo"] or 0),
+                    "avg_duration": float(row["avg_duration"] or 0),
                 }
-                for row in cursor.fetchall()
+                for row in cur.fetchall()
             ]
-    finally:
-        conn.close()
 
 
 @router.get("/tempo-distribution")
-async def get_tempo_distribution(current_user: dict = Depends(verify_token)):
-    """Get distribution of tracks by tempo ranges."""
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("""
-                SELECT 
-                    CASE 
-                        WHEN tempo IS NULL THEN 'Unknown'
-                        WHEN tempo < 60 THEN 'Very Slow (< 60)'
-                        WHEN tempo < 90 THEN 'Slow (60-89)'
-                        WHEN tempo < 120 THEN 'Medium (90-119)'
-                        WHEN tempo < 150 THEN 'Fast (120-149)'
-                        ELSE 'Very Fast (150+)'
-                    END as tempo_range,
-                    COUNT(*) as count
-                FROM tracks
-                GROUP BY 
-                    CASE 
-                        WHEN tempo IS NULL THEN 'Unknown'
-                        WHEN tempo < 60 THEN 'Very Slow (< 60)'
-                        WHEN tempo < 90 THEN 'Slow (60-89)'
-                        WHEN tempo < 120 THEN 'Medium (90-119)'
-                        WHEN tempo < 150 THEN 'Fast (120-149)'
-                        ELSE 'Very Fast (150+)'
-                    END
-                ORDER BY 
-                    CASE 
-                        WHEN tempo IS NULL THEN 0
-                        WHEN tempo < 60 THEN 1
-                        WHEN tempo < 90 THEN 2
-                        WHEN tempo < 120 THEN 3
-                        WHEN tempo < 150 THEN 4
-                        ELSE 5
-                    END
-            """)
-            
+def get_tempo_distribution(current_user: dict = Depends(verify_token)):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                WITH bucketed AS (
+                    SELECT
+                        CASE
+                            WHEN tempo IS NULL THEN 'Unknown'
+                            WHEN tempo < 60 THEN 'Very Slow (< 60)'
+                            WHEN tempo < 90 THEN 'Slow (60-89)'
+                            WHEN tempo < 120 THEN 'Medium (90-119)'
+                            WHEN tempo < 150 THEN 'Fast (120-149)'
+                            ELSE 'Very Fast (150+)'
+                        END AS tempo_range,
+                        CASE
+                            WHEN tempo IS NULL THEN 0
+                            WHEN tempo < 60 THEN 1
+                            WHEN tempo < 90 THEN 2
+                            WHEN tempo < 120 THEN 3
+                            WHEN tempo < 150 THEN 4
+                            ELSE 5
+                        END AS sort_order,
+                        tempo,
+                        duration_seconds
+                    FROM tracks
+                )
+                SELECT
+                    tempo_range,
+                    COUNT(*) AS count,
+                    ROUND(AVG(tempo)::numeric, 1) AS avg_tempo,
+                    ROUND(AVG(duration_seconds)::numeric, 1) AS avg_duration
+                FROM bucketed
+                GROUP BY tempo_range, sort_order
+                ORDER BY sort_order;
+                """
+            )
             return [
                 {
-                    "tempo_range": row[0],
-                    "count": row[1]
+                    "tempo_range": row["tempo_range"],
+                    "count": row["count"],
+                    "avg_tempo": float(row["avg_tempo"] or 0),
+                    "avg_duration": float(row["avg_duration"] or 0),
                 }
-                for row in cursor.fetchall()
+                for row in cur.fetchall()
             ]
-    finally:
-        conn.close()
 
 
 @router.get("/duration-analysis")
-async def get_duration_analysis(current_user: dict = Depends(verify_token)):
-    """Get analysis of tracks by duration."""
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute("""
-                SELECT 
-                    CASE 
-                        WHEN duration_seconds < 15 THEN 'Very Short (< 15s)'
-                        WHEN duration_seconds < 30 THEN 'Short (15-29s)'
-                        WHEN duration_seconds < 60 THEN 'Medium (30-59s)'
-                        WHEN duration_seconds < 120 THEN 'Long (60-119s)'
-                        ELSE 'Very Long (120s+)'
-                    END as duration_range,
-                    COUNT(*) as count,
-                    AVG(duration_seconds) as avg_duration
-                FROM tracks
-                GROUP BY 
-                    CASE 
-                        WHEN duration_seconds < 15 THEN 'Very Short (< 15s)'
-                        WHEN duration_seconds < 30 THEN 'Short (15-29s)'
-                        WHEN duration_seconds < 60 THEN 'Medium (30-59s)'
-                        WHEN duration_seconds < 120 THEN 'Long (60-119s)'
-                        ELSE 'Very Long (120s+)'
-                    END
-                ORDER BY avg_duration
-            """)
-            
+def get_duration_analysis(current_user: dict = Depends(verify_token)):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                WITH bucketed AS (
+                    SELECT
+                        CASE
+                            WHEN duration_seconds < 30 THEN 'Short (< 30s)'
+                            WHEN duration_seconds < 120 THEN 'Medium (30-119s)'
+                            WHEN duration_seconds < 240 THEN 'Standard (2-4m)'
+                            WHEN duration_seconds < 420 THEN 'Long (4-7m)'
+                            ELSE 'Very Long (7m+)'
+                        END AS duration_range,
+                        CASE
+                            WHEN duration_seconds < 30 THEN 1
+                            WHEN duration_seconds < 120 THEN 2
+                            WHEN duration_seconds < 240 THEN 3
+                            WHEN duration_seconds < 420 THEN 4
+                            ELSE 5
+                        END AS sort_order,
+                        duration_seconds,
+                        tempo
+                    FROM tracks
+                )
+                SELECT
+                    duration_range,
+                    COUNT(*) AS count,
+                    ROUND(AVG(duration_seconds)::numeric, 1) AS avg_duration,
+                    ROUND(AVG(tempo)::numeric, 1) AS avg_tempo
+                FROM bucketed
+                GROUP BY duration_range, sort_order
+                ORDER BY sort_order;
+                """
+            )
             return [
                 {
-                    "duration_range": row[0],
-                    "count": row[1],
-                    "avg_duration": round(row[2], 1) if row[2] else 0
+                    "duration_range": row["duration_range"],
+                    "count": row["count"],
+                    "avg_duration": float(row["avg_duration"] or 0),
+                    "avg_tempo": float(row["avg_tempo"] or 0),
                 }
-                for row in cursor.fetchall()
+                for row in cur.fetchall()
             ]
-    finally:
-        conn.close()
 
 
 @router.get("/rating-analysis")
-async def get_rating_analysis(current_user: dict = Depends(verify_token)):
-    """Get analysis of feedback ratings."""
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cursor:
-            # Rating distribution
-            cursor.execute("""
-                SELECT 
-                    rating,
-                    COUNT(*) as count
-                FROM feedback 
+def get_rating_analysis(current_user: dict = Depends(verify_token)):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT rating, COUNT(*) AS count
+                FROM feedback
                 WHERE rating IS NOT NULL
                 GROUP BY rating
-                ORDER BY rating
-            """)
+                ORDER BY rating;
+                """
+            )
             rating_distribution = [
-                {"rating": row[0], "count": row[1]}
-                for row in cursor.fetchall()
+                {"rating": row["rating"], "count": row["count"]}
+                for row in cur.fetchall()
             ]
-            
-            # Average rating by genre
-            cursor.execute("""
-                SELECT 
-                    COALESCE(t.genre, 'Unknown') as genre,
-                    AVG(tf.rating) as avg_rating,
-                    COUNT(tf.rating) as rating_count
+
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(NULLIF(TRIM(t.genre), ''), 'Unknown') AS genre,
+                    ROUND(AVG(f.rating)::numeric, 2) AS avg_rating,
+                    COUNT(f.rating) AS rating_count
                 FROM tracks t
-                JOIN feedback tf ON t.id = tf.track_id
-                WHERE tf.rating IS NOT NULL
-                GROUP BY t.genre
-                HAVING COUNT(tf.rating) > 0
-                ORDER BY avg_rating DESC
-            """)
+                JOIN feedback f ON t.id = f.track_id
+                WHERE f.rating IS NOT NULL
+                GROUP BY COALESCE(NULLIF(TRIM(t.genre), ''), 'Unknown')
+                ORDER BY avg_rating DESC, rating_count DESC;
+                """
+            )
             genre_ratings = [
                 {
-                    "genre": row[0],
-                    "avg_rating": round(row[1], 2) if row[1] else 0,
-                    "rating_count": row[2]
+                    "genre": row["genre"],
+                    "avg_rating": float(row["avg_rating"] or 0),
+                    "rating_count": row["rating_count"],
                 }
-                for row in cursor.fetchall()
+                for row in cur.fetchall()
             ]
-            
+
             return {
                 "rating_distribution": rating_distribution,
-                "genre_ratings": genre_ratings
+                "genre_ratings": genre_ratings,
             }
-    finally:
-        conn.close()
 
 
 @router.get("/trends-over-time")
-async def get_trends_over_time(current_user: dict = Depends(verify_token)):
-    """Get trends of track creation over time."""
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cursor:
-            # Tracks created per day (last 30 days)
-            cursor.execute("""
-                SELECT 
-                    DATE(created_at) as date,
-                    COUNT(*) as count
+def get_trends_over_time(current_user: dict = Depends(verify_token)):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DATE(created_at) AS date, COUNT(*) AS count
                 FROM tracks
                 WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
                 GROUP BY DATE(created_at)
-                ORDER BY date
-            """)
+                ORDER BY date;
+                """
+            )
             daily_tracks = [
-                {
-                    "date": row[0].isoformat() if row[0] else None,
-                    "count": row[1]
-                }
-                for row in cursor.fetchall()
+                {"date": row["date"].isoformat(), "count": row["count"]}
+                for row in cur.fetchall()
             ]
-            
-            # Popular genres over time
-            cursor.execute("""
-                SELECT 
-                    DATE(created_at) as date,
-                    COALESCE(genre, 'Unknown') as genre,
-                    COUNT(*) as count
+
+            cur.execute(
+                """
+                SELECT
+                    DATE(created_at) AS date,
+                    COALESCE(NULLIF(TRIM(genre), ''), 'Unknown') AS genre,
+                    COUNT(*) AS count
                 FROM tracks
                 WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
-                GROUP BY DATE(created_at), genre
-                HAVING COUNT(*) > 0
-                ORDER BY date, count DESC
-            """)
-            genre_trends = []
-            for row in cursor.fetchall():
-                genre_trends.append({
-                    "date": row[0].isoformat() if row[0] else None,
-                    "genre": row[1],
-                    "count": row[2]
-                })
-            
+                GROUP BY DATE(created_at), COALESCE(NULLIF(TRIM(genre), ''), 'Unknown')
+                ORDER BY date, count DESC;
+                """
+            )
+            genre_trends = [
+                {
+                    "date": row["date"].isoformat(),
+                    "genre": row["genre"],
+                    "count": row["count"],
+                }
+                for row in cur.fetchall()
+            ]
+
             return {
                 "daily_tracks": daily_tracks,
-                "genre_trends": genre_trends
+                "genre_trends": genre_trends,
             }
-    finally:
-        conn.close()
 
 
 @router.get("/user-preferences")
-async def get_user_preferences(current_user: dict = Depends(verify_token)):
-    """Get analysis of user preferences and behavior."""
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cursor:
-            # Most active users
-            cursor.execute("""
-                SELECT 
+def get_user_preferences(current_user: dict = Depends(verify_token)):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    u.id,
                     u.email,
-                    COUNT(DISTINCT t.id) as tracks_created,
-                    COUNT(DISTINCT tf.id) as feedback_given
+                    COUNT(DISTINCT t.id) AS tracks_created,
+                    COUNT(DISTINCT f.id) AS feedback_given
                 FROM users u
                 LEFT JOIN tracks t ON u.id = t.user_id
-                LEFT JOIN feedback tf ON u.id = tf.user_id
+                LEFT JOIN feedback f ON u.id = f.user_id
                 GROUP BY u.id, u.email
-                HAVING COUNT(t.id) > 0 OR COUNT(tf.id) > 0
+                HAVING COUNT(DISTINCT t.id) > 0 OR COUNT(DISTINCT f.id) > 0
                 ORDER BY tracks_created DESC, feedback_given DESC
-                LIMIT 10
-            """)
+                LIMIT 10;
+                """
+            )
             active_users = [
                 {
-                    "email": row[0],
-                    "tracks_created": row[1],
-                    "feedback_given": row[2]
+                    "user_id": row["id"],
+                    "email": row["email"],
+                    "tracks_created": row["tracks_created"],
+                    "feedback_given": row["feedback_given"],
                 }
-                for row in cursor.fetchall()
+                for row in cur.fetchall()
             ]
-            
-            # User engagement metrics
-            cursor.execute("""
-                SELECT 
-                    AVG(listen_count) as avg_listens,
-                    COUNT(CASE WHEN liked THEN 1 END) * 100.0 / COUNT(*) as like_percentage,
-                    COUNT(CASE WHEN downloaded THEN 1 END) * 100.0 / COUNT(*) as download_percentage
-                FROM feedback
-                WHERE listen_count > 0
-            """)
-            engagement_row = cursor.fetchone()
-            engagement = {
-                "avg_listens": round(engagement_row[0], 2) if engagement_row[0] else 0,
-                "like_percentage": round(engagement_row[1], 1) if engagement_row[1] else 0,
-                "download_percentage": round(engagement_row[2], 1) if engagement_row[2] else 0
-            } if engagement_row else {}
-            
+
+            cur.execute(
+                """
+                SELECT
+                    ROUND(AVG(listen_count)::numeric, 2) AS avg_listens,
+                    ROUND(100.0 * SUM(CASE WHEN liked THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 1) AS like_percentage,
+                    ROUND(100.0 * SUM(CASE WHEN downloaded THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 1) AS download_percentage
+                FROM feedback;
+                """
+            )
+            engagement_row = cur.fetchone()
+
             return {
                 "active_users": active_users,
-                "engagement": engagement
+                "engagement": {
+                    "avg_listens": float(engagement_row["avg_listens"] or 0) if engagement_row else 0,
+                    "like_percentage": float(engagement_row["like_percentage"] or 0) if engagement_row else 0,
+                    "download_percentage": float(engagement_row["download_percentage"] or 0) if engagement_row else 0,
+                },
             }
-    finally:
-        conn.close()
+
+
+@router.get("/key-distribution")
+def get_key_distribution(current_user: dict = Depends(verify_token)):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(NULLIF(TRIM(key_signature), ''), 'Unknown') AS key_signature,
+                    COUNT(*) AS count,
+                    ROUND(AVG(duration_seconds)::numeric, 1) AS avg_duration,
+                    ROUND(AVG(tempo)::numeric, 1) AS avg_tempo
+                FROM tracks
+                GROUP BY COALESCE(NULLIF(TRIM(key_signature), ''), 'Unknown')
+                ORDER BY count DESC, key_signature ASC;
+                """
+            )
+            return [
+                {
+                    "key_signature": row["key_signature"],
+                    "count": row["count"],
+                    "avg_duration": float(row["avg_duration"] or 0),
+                    "avg_tempo": float(row["avg_tempo"] or 0),
+                }
+                for row in cur.fetchall()
+            ]
+
+
+@router.get("/ai-performance")
+def get_ai_performance(current_user: dict = Depends(verify_token)):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                WITH rated AS (
+                    SELECT
+                        CASE
+                            WHEN t.ai_temperature IS NULL THEN 'Unknown'
+                            WHEN t.ai_temperature < 0.4 THEN 'Low (< 0.4)'
+                            WHEN t.ai_temperature < 0.7 THEN 'Medium (0.4-0.69)'
+                            WHEN t.ai_temperature < 1.0 THEN 'High (0.7-0.99)'
+                            ELSE 'Very High (1.0+)'
+                        END AS temperature_range,
+                        CASE
+                            WHEN t.ai_temperature IS NULL THEN 0
+                            WHEN t.ai_temperature < 0.4 THEN 1
+                            WHEN t.ai_temperature < 0.7 THEN 2
+                            WHEN t.ai_temperature < 1.0 THEN 3
+                            ELSE 4
+                        END AS sort_order,
+                        t.ai_temperature,
+                        f.rating
+                    FROM tracks t
+                    JOIN feedback f ON t.id = f.track_id
+                    WHERE f.rating IS NOT NULL
+                )
+                SELECT
+                    temperature_range,
+                    COUNT(*) AS feedback_count,
+                    ROUND(AVG(rating)::numeric, 2) AS avg_rating,
+                    ROUND(AVG(ai_temperature)::numeric, 2) AS avg_temperature
+                FROM rated
+                GROUP BY temperature_range, sort_order
+                ORDER BY sort_order;
+                """
+            )
+            return [
+                {
+                    "temperature_range": row["temperature_range"],
+                    "feedback_count": row["feedback_count"],
+                    "avg_rating": float(row["avg_rating"] or 0),
+                    "avg_temperature": float(row["avg_temperature"] or 0),
+                }
+                for row in cur.fetchall()
+            ]
+
+
+@router.get("/monthly-evolution")
+def get_monthly_evolution(current_user: dict = Depends(verify_token)):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                WITH months AS (
+                    SELECT DATE_TRUNC('month', created_at)::date AS month
+                    FROM tracks
+                    UNION
+                    SELECT DATE_TRUNC('month', created_at)::date AS month
+                    FROM feedback
+                ),
+                generated AS (
+                    SELECT DATE_TRUNC('month', created_at)::date AS month, COUNT(*) AS generated_count
+                    FROM tracks
+                    GROUP BY DATE_TRUNC('month', created_at)::date
+                ),
+                feedback_months AS (
+                    SELECT DATE_TRUNC('month', created_at)::date AS month, COUNT(*) AS feedback_count
+                    FROM feedback
+                    GROUP BY DATE_TRUNC('month', created_at)::date
+                )
+                SELECT
+                    months.month,
+                    COALESCE(generated.generated_count, 0) AS generated_count,
+                    COALESCE(feedback_months.feedback_count, 0) AS feedback_count
+                FROM months
+                LEFT JOIN generated ON months.month = generated.month
+                LEFT JOIN feedback_months ON months.month = feedback_months.month
+                ORDER BY months.month;
+                """
+            )
+            return [
+                {
+                    "month": row["month"].isoformat(),
+                    "generated_count": row["generated_count"],
+                    "feedback_count": row["feedback_count"],
+                }
+                for row in cur.fetchall()
+            ]

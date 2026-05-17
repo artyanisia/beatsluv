@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import auth, feedback, generation_requests, tracks, analytics
+from app.routers import admin, analytics, auth, feedback, generation_requests, predictions, tracks
 
 
 app = FastAPI(title="BeatsLuv API")
@@ -43,3 +43,5 @@ app.include_router(tracks.router)
 app.include_router(generation_requests.router)
 app.include_router(feedback.router)
 app.include_router(analytics.router)
+app.include_router(predictions.router)
+app.include_router(admin.router)
