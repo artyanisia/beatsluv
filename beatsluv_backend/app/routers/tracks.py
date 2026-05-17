@@ -14,9 +14,11 @@ router = APIRouter(prefix="/tracks", tags=["tracks"])
 class TrackCreate(BaseModel):
     generation_request_id: int
     title: str
-    audio_url: str
+    audio_url: Optional[str] = None
     duration_seconds: int
     status: str = "READY"
+    user_id: Optional[int] = None
+    prompt: Optional[str] = None
     artist: Optional[str] = None
     album: Optional[str] = None
     release_date: Optional[str] = None
@@ -24,6 +26,8 @@ class TrackCreate(BaseModel):
     external_id: Optional[str] = None
     external_url: Optional[str] = None
     genre: Optional[str] = None
+    mood: Optional[str] = None
+    tempo: Optional[int] = None
 
 
 class TrackUpdate(BaseModel):
@@ -31,6 +35,8 @@ class TrackUpdate(BaseModel):
     audio_url: Optional[str] = None
     duration_seconds: Optional[int] = None
     status: Optional[str] = None
+    user_id: Optional[int] = None
+    prompt: Optional[str] = None
     artist: Optional[str] = None
     album: Optional[str] = None
     release_date: Optional[str] = None
@@ -38,6 +44,8 @@ class TrackUpdate(BaseModel):
     external_id: Optional[str] = None
     external_url: Optional[str] = None
     genre: Optional[str] = None
+    mood: Optional[str] = None
+    tempo: Optional[int] = None
 
 
 class MusicBrainzImportRequest(BaseModel):
@@ -52,13 +60,18 @@ def ensure_track_metadata_columns(conn):
         cur.execute(
             """
             ALTER TABLE tracks
+            ALTER COLUMN audio_url DROP NOT NULL,
+            ADD COLUMN IF NOT EXISTS user_id INT REFERENCES users(id),
+            ADD COLUMN IF NOT EXISTS prompt TEXT,
             ADD COLUMN IF NOT EXISTS artist VARCHAR(255),
             ADD COLUMN IF NOT EXISTS album VARCHAR(255),
             ADD COLUMN IF NOT EXISTS release_date VARCHAR(50),
             ADD COLUMN IF NOT EXISTS source VARCHAR(50),
             ADD COLUMN IF NOT EXISTS external_id VARCHAR(255),
             ADD COLUMN IF NOT EXISTS external_url TEXT,
-            ADD COLUMN IF NOT EXISTS genre VARCHAR(100);
+            ADD COLUMN IF NOT EXISTS genre VARCHAR(100),
+            ADD COLUMN IF NOT EXISTS mood VARCHAR(100),
+            ADD COLUMN IF NOT EXISTS tempo INT;
             """
         )
 
@@ -98,15 +111,19 @@ def create_track(track: TrackCreate):
                     audio_url,
                     duration_seconds,
                     status,
+                    user_id,
+                    prompt,
                     artist,
                     album,
                     release_date,
                     source,
                     external_id,
                     external_url,
-                    genre
+                    genre,
+                    mood,
+                    tempo
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING *;
                 """,
                 (
@@ -115,6 +132,8 @@ def create_track(track: TrackCreate):
                     track.audio_url,
                     track.duration_seconds,
                     track.status,
+                    track.user_id,
+                    track.prompt,
                     track.artist,
                     track.album,
                     track.release_date,
@@ -122,6 +141,8 @@ def create_track(track: TrackCreate):
                     track.external_id,
                     track.external_url,
                     track.genre,
+                    track.mood,
+                    track.tempo,
                 ),
             )
             created_track = cur.fetchone()
@@ -143,6 +164,8 @@ def update_track(track_id: int, track: TrackUpdate):
         else existing_track["duration_seconds"]
     )
     updated_status = track.status if track.status is not None else existing_track["status"]
+    updated_user_id = track.user_id if track.user_id is not None else existing_track.get("user_id")
+    updated_prompt = track.prompt if track.prompt is not None else existing_track.get("prompt")
     updated_artist = track.artist if track.artist is not None else existing_track.get("artist")
     updated_album = track.album if track.album is not None else existing_track.get("album")
     updated_release_date = (
@@ -156,6 +179,8 @@ def update_track(track_id: int, track: TrackUpdate):
         track.external_url if track.external_url is not None else existing_track.get("external_url")
     )
     updated_genre = track.genre if track.genre is not None else existing_track.get("genre")
+    updated_mood = track.mood if track.mood is not None else existing_track.get("mood")
+    updated_tempo = track.tempo if track.tempo is not None else existing_track.get("tempo")
 
     with get_connection() as conn:
         ensure_track_metadata_columns(conn)
@@ -167,13 +192,17 @@ def update_track(track_id: int, track: TrackUpdate):
                     audio_url = %s,
                     duration_seconds = %s,
                     status = %s,
+                    user_id = %s,
+                    prompt = %s,
                     artist = %s,
                     album = %s,
                     release_date = %s,
                     source = %s,
                     external_id = %s,
                     external_url = %s,
-                    genre = %s
+                    genre = %s,
+                    mood = %s,
+                    tempo = %s
                 WHERE id = %s
                 RETURNING *;
                 """,
@@ -182,6 +211,8 @@ def update_track(track_id: int, track: TrackUpdate):
                     updated_audio_url,
                     updated_duration,
                     updated_status,
+                    updated_user_id,
+                    updated_prompt,
                     updated_artist,
                     updated_album,
                     updated_release_date,
@@ -189,6 +220,8 @@ def update_track(track_id: int, track: TrackUpdate):
                     updated_external_id,
                     updated_external_url,
                     updated_genre,
+                    updated_mood,
+                    updated_tempo,
                     track_id,
                 ),
             )
@@ -239,8 +272,8 @@ def import_musicbrainz_tracks(
                         current_user["id"],
                         prompt,
                         imported_track.genre,
-                        request.mood,
-                        None,
+                        request.mood or imported_track.mood,
+                        imported_track.tempo,
                         imported_track.duration_seconds,
                         "IMPORTED",
                     ),
@@ -255,23 +288,29 @@ def import_musicbrainz_tracks(
                         audio_url,
                         duration_seconds,
                         status,
+                        user_id,
+                        prompt,
                         artist,
                         album,
                         release_date,
                         source,
                         external_id,
                         external_url,
-                        genre
+                        genre,
+                        mood,
+                        tempo
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING *;
                     """,
                     (
                         generation_request["id"],
                         imported_track.title,
-                        imported_track.audio_url,
+                        None,
                         imported_track.duration_seconds,
                         "IMPORTED",
+                        current_user["id"],
+                        prompt,
                         imported_track.artist,
                         imported_track.album,
                         imported_track.release_date,
@@ -279,6 +318,8 @@ def import_musicbrainz_tracks(
                         imported_track.external_id,
                         imported_track.external_url,
                         imported_track.genre,
+                        request.mood or imported_track.mood,
+                        imported_track.tempo,
                     ),
                 )
                 created_tracks.append(cur.fetchone())

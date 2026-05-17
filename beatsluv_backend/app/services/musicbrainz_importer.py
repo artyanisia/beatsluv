@@ -34,19 +34,29 @@ class MusicBrainzTrack:
     release_date: str | None
     duration_seconds: int
     genre: str | None
+    mood: str | None
+    tempo: int | None
     external_id: str
     external_url: str
-    audio_url: str
+    audio_url: str | None
 
 
 class MusicBrainzImporter:
-    def search_tracks(self, query: str, limit: int = 10, genre: str | None = None):
+    def search_tracks(
+        self,
+        query: str,
+        limit: int = 10,
+        genre: str | None = None,
+        offset: int = 0,
+        create_audio_preview: bool = True,
+    ):
         clean_query = (query or "").strip()
         if not clean_query:
             raise MusicBrainzImportError("MusicBrainz query cannot be empty.")
 
         safe_limit = max(1, min(int(limit or 10), 50))
-        payload = self._search_recordings(query=clean_query, limit=safe_limit)
+        safe_offset = max(0, int(offset or 0))
+        payload = self._search_recordings(query=clean_query, limit=safe_limit, offset=safe_offset)
         recordings = payload.get("recordings") or []
 
         tracks = []
@@ -62,11 +72,16 @@ class MusicBrainzImporter:
             release = self._extract_release(recording)
             duration_seconds = self._extract_duration_seconds(recording)
             track_genre = genre or self._extract_tag(recording)
-            audio_url = self._write_fake_preview(
-                title=title,
-                artist=artist or "Unknown Artist",
-                seconds=self._preview_seconds(),
-            )
+            tempo = self._infer_tempo(recording_id=recording_id, genre=track_genre)
+            mood = self._infer_mood(recording_id=recording_id, genre=track_genre)
+            if create_audio_preview:
+                audio_url = self._write_fake_preview(
+                    title=title,
+                    artist=artist or "Unknown Artist",
+                    seconds=self._preview_seconds(),
+                )
+            else:
+                audio_url = None
 
             tracks.append(
                 MusicBrainzTrack(
@@ -76,6 +91,8 @@ class MusicBrainzImporter:
                     release_date=release.get("release_date"),
                     duration_seconds=duration_seconds,
                     genre=track_genre,
+                    mood=mood,
+                    tempo=tempo,
                     external_id=recording_id,
                     external_url=f"https://musicbrainz.org/recording/{recording_id}",
                     audio_url=audio_url,
@@ -87,7 +104,7 @@ class MusicBrainzImporter:
 
         return tracks
 
-    def _search_recordings(self, query: str, limit: int):
+    def _search_recordings(self, query: str, limit: int, offset: int = 0):
         base_url = os.getenv("MUSICBRAINZ_API_URL", DEFAULT_MUSICBRAINZ_API_URL).rstrip("/")
         user_agent = os.getenv("MUSICBRAINZ_USER_AGENT", DEFAULT_MUSICBRAINZ_USER_AGENT)
 
@@ -98,6 +115,8 @@ class MusicBrainzImporter:
         params = {
             "query": query,
             "limit": limit,
+            "offset": offset,
+            "inc": "artist-credits+releases+tags",
             "fmt": "json",
         }
 
@@ -152,6 +171,48 @@ class MusicBrainzImporter:
         if not tags:
             return None
         return tags[0].get("name")
+
+    def _infer_tempo(self, recording_id: str, genre: str | None):
+        normalized_genre = (genre or "").lower()
+        tempo_ranges = {
+            "classical": (60, 118),
+            "ambient": (60, 105),
+            "jazz": (80, 150),
+            "hip-hop": (75, 115),
+            "hip hop": (75, 115),
+            "r&b": (70, 115),
+            "country": (85, 140),
+            "folk": (75, 130),
+            "pop": (95, 135),
+            "rock": (105, 165),
+            "metal": (120, 190),
+            "electronic": (115, 150),
+            "dance": (118, 140),
+        }
+        low, high = tempo_ranges.get(normalized_genre, (75, 160))
+        seed = int(hashlib.sha256(recording_id.encode("utf-8")).hexdigest()[:8], 16)
+        return low + (seed % (high - low + 1))
+
+    def _infer_mood(self, recording_id: str, genre: str | None):
+        normalized_genre = (genre or "").lower()
+        mood_choices = {
+            "classical": ["calm", "dramatic", "focused", "melancholic"],
+            "ambient": ["calm", "dreamy", "relaxed", "atmospheric"],
+            "jazz": ["smooth", "relaxed", "sophisticated", "upbeat"],
+            "hip-hop": ["confident", "energetic", "dark", "upbeat"],
+            "hip hop": ["confident", "energetic", "dark", "upbeat"],
+            "r&b": ["romantic", "smooth", "sad", "chill"],
+            "country": ["nostalgic", "warm", "upbeat", "sad"],
+            "folk": ["warm", "calm", "nostalgic", "hopeful"],
+            "pop": ["happy", "upbeat", "dreamy", "romantic"],
+            "rock": ["energetic", "angry", "upset", "anthemic"],
+            "metal": ["aggressive", "dark", "intense", "angry"],
+            "electronic": ["energetic", "focused", "party", "dreamy"],
+            "dance": ["party", "energetic", "happy", "upbeat"],
+        }
+        choices = mood_choices.get(normalized_genre, ["upbeat", "calm", "sad", "energetic"])
+        seed = int(hashlib.sha256(recording_id.encode("utf-8")).hexdigest()[:8], 16)
+        return choices[seed % len(choices)]
 
     def _preview_seconds(self):
         try:

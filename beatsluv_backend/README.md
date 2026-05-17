@@ -1,5 +1,65 @@
 # BeatsLuv Backend
 
+## Start Everything
+
+From the main `BeatsLuv` project folder, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start_project.ps1
+```
+
+This starts or reuses all required local services:
+
+- ACE-Step: `http://127.0.0.1:7860`
+- Backend: `http://127.0.0.1:8001`
+- Frontend: `http://127.0.0.1:5173`
+
+ACE-Step can take a few minutes to become ready. Wait until `http://127.0.0.1:7860/health` responds before generating music.
+
+To start everything without opening the browser:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start_project.ps1 -NoBrowser
+```
+
+## Seed MusicBrainz Demo Data
+
+From the `beatsluv_backend` folder, import real MusicBrainz track metadata into PostgreSQL:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\seed_musicbrainz_tracks.py --count 500
+```
+
+This creates metadata-only imported tracks without running ACE-Step generation. The seeder fetches real titles, artists, albums, durations, release dates, and MusicBrainz links, then saves the analytics fields used by the app: `prompt`, `genre`, `mood`, `tempo`, `duration_seconds`, and `user_id`. Imported MusicBrainz rows do not have an `audio_url`; only ACE-Step generations have playable audio files. The seeder respects MusicBrainz's public API pace by waiting between requests and skips tracks already imported from MusicBrainz.
+
+Useful variants:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\seed_musicbrainz_tracks.py --count 100 --dry-run
+.\.venv\Scripts\python.exe scripts\seed_musicbrainz_tracks.py --count 300 --query blues=blues --query reggae=reggae
+```
+
+## Seed Jamendo Tracks With Audio
+
+Jamendo provides real playable MP3 URLs. Add a Jamendo client id to `.env`:
+
+```env
+JAMENDO_CLIENT_ID=your_jamendo_client_id
+```
+
+Then import tracks from the `beatsluv_backend` folder:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\seed_jamendo_tracks.py --count 300
+```
+
+Useful variants:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\seed_jamendo_tracks.py --count 50 --dry-run
+.\.venv\Scripts\python.exe scripts\seed_jamendo_tracks.py --count 500 --tag reggae --tag blues
+```
+
 FastAPI backend for generating music with a local ACE-Step server, importing MusicBrainz metadata, and storing tracks in PostgreSQL.
 
 ## What It Uses

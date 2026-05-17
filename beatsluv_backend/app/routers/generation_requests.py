@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -9,6 +10,21 @@ from app.services.music_generator import MusicGenerationError, MusicGeneratorSer
 
 
 router = APIRouter(prefix="/generation-requests", tags=["generation requests"])
+logger = logging.getLogger(__name__)
+
+
+def ensure_track_analytics_columns(conn):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            ALTER TABLE tracks
+            ADD COLUMN IF NOT EXISTS user_id INT REFERENCES users(id),
+            ADD COLUMN IF NOT EXISTS prompt TEXT,
+            ADD COLUMN IF NOT EXISTS genre VARCHAR(100),
+            ADD COLUMN IF NOT EXISTS mood VARCHAR(100),
+            ADD COLUMN IF NOT EXISTS tempo INT;
+            """
+        )
 
 
 class GenerationRequestCreate(BaseModel):
@@ -30,6 +46,7 @@ def create_generation_request(
     generator = MusicGeneratorService()
 
     with get_connection() as conn:
+        ensure_track_analytics_columns(conn)
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -66,6 +83,7 @@ def create_generation_request(
                     duration_seconds=request.duration_seconds,
                 )
             except MusicGenerationError as exc:
+                logger.exception("Music generation failed")
                 cur.execute(
                     """
                     UPDATE generation_requests
@@ -75,7 +93,7 @@ def create_generation_request(
                     ("FAILED", generation_request["id"]),
                 )
                 conn.commit()
-                raise HTTPException(status_code=502, detail="Couldn't generate") from exc
+                raise HTTPException(status_code=502, detail=str(exc) or "Couldn't generate") from exc
 
             request_status = "COMPLETED"
 
@@ -86,9 +104,14 @@ def create_generation_request(
                     title,
                     audio_url,
                     duration_seconds,
-                    status
+                    status,
+                    user_id,
+                    prompt,
+                    genre,
+                    mood,
+                    tempo
                 )
-                VALUES (%s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING *;
                 """,
                 (
@@ -97,6 +120,11 @@ def create_generation_request(
                     generated_track["audio_url"],
                     generated_track["duration_seconds"],
                     request_status,
+                    current_user["id"],
+                    request.prompt,
+                    request.genre,
+                    request.mood,
+                    request.tempo,
                 ),
             )
             track = cur.fetchone()

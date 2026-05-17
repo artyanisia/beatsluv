@@ -22,11 +22,11 @@ async def get_overview_stats(current_user: dict = Depends(verify_token)):
             total_users = cursor.fetchone()[0]
             
             # Total feedback entries
-            cursor.execute("SELECT COUNT(*) FROM track_feedback")
+            cursor.execute("SELECT COUNT(*) FROM feedback")
             total_feedback = cursor.fetchone()[0]
             
             # Average rating
-            cursor.execute("SELECT AVG(rating) FROM track_feedback WHERE rating IS NOT NULL")
+            cursor.execute("SELECT AVG(rating) FROM feedback WHERE rating IS NOT NULL")
             avg_rating_result = cursor.fetchone()
             avg_rating = round(avg_rating_result[0], 2) if avg_rating_result[0] else 0
             
@@ -216,7 +216,7 @@ async def get_rating_analysis(current_user: dict = Depends(verify_token)):
                 SELECT 
                     rating,
                     COUNT(*) as count
-                FROM track_feedback 
+                FROM feedback 
                 WHERE rating IS NOT NULL
                 GROUP BY rating
                 ORDER BY rating
@@ -233,7 +233,7 @@ async def get_rating_analysis(current_user: dict = Depends(verify_token)):
                     AVG(tf.rating) as avg_rating,
                     COUNT(tf.rating) as rating_count
                 FROM tracks t
-                JOIN track_feedback tf ON t.id = tf.track_id
+                JOIN feedback tf ON t.id = tf.track_id
                 WHERE tf.rating IS NOT NULL
                 GROUP BY t.genre
                 HAVING COUNT(tf.rating) > 0
@@ -318,11 +318,11 @@ async def get_user_preferences(current_user: dict = Depends(verify_token)):
             cursor.execute("""
                 SELECT 
                     u.email,
-                    COUNT(t.id) as tracks_created,
-                    COUNT(tf.id) as feedback_given
+                    COUNT(DISTINCT t.id) as tracks_created,
+                    COUNT(DISTINCT tf.id) as feedback_given
                 FROM users u
                 LEFT JOIN tracks t ON u.id = t.user_id
-                LEFT JOIN track_feedback tf ON u.id = tf.user_id
+                LEFT JOIN feedback tf ON u.id = tf.user_id
                 GROUP BY u.id, u.email
                 HAVING COUNT(t.id) > 0 OR COUNT(tf.id) > 0
                 ORDER BY tracks_created DESC, feedback_given DESC
@@ -343,7 +343,7 @@ async def get_user_preferences(current_user: dict = Depends(verify_token)):
                     AVG(listen_count) as avg_listens,
                     COUNT(CASE WHEN liked THEN 1 END) * 100.0 / COUNT(*) as like_percentage,
                     COUNT(CASE WHEN downloaded THEN 1 END) * 100.0 / COUNT(*) as download_percentage
-                FROM track_feedback
+                FROM feedback
                 WHERE listen_count > 0
             """)
             engagement_row = cursor.fetchone()

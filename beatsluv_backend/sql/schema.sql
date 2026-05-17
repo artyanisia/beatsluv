@@ -23,9 +23,11 @@ CREATE TABLE tracks (
     id SERIAL PRIMARY KEY,
     generation_request_id INT NOT NULL,
     title VARCHAR(255) NOT NULL,
-    audio_url TEXT NOT NULL,
+    audio_url TEXT,
     duration_seconds INT NOT NULL,
     status VARCHAR(50) NOT NULL,
+    user_id INT,
+    prompt TEXT,
     artist VARCHAR(255),
     album VARCHAR(255),
     release_date VARCHAR(50),
@@ -33,8 +35,11 @@ CREATE TABLE tracks (
     external_id VARCHAR(255),
     external_url TEXT,
     genre VARCHAR(100),
+    mood VARCHAR(100),
+    tempo INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (generation_request_id) REFERENCES generation_requests(id)
+    FOREIGN KEY (generation_request_id) REFERENCES generation_requests(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 CREATE TABLE feedback (

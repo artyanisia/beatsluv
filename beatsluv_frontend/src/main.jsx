@@ -58,6 +58,7 @@ function AppContent() {
     () => tracks.find((track) => String(track.id) === String(selectedTrackId)),
     [tracks, selectedTrackId],
   );
+  const selectedTrackAudioUrl = selectedTrack ? buildAudioUrl(selectedTrack.audio_url) : "";
 
   async function fetchTracks() {
     setIsLoadingTracks(true);
@@ -349,7 +350,7 @@ function AppContent() {
                   >
                     <strong>{track.title}</strong>
                     <span>
-                      {track.artist ? `${track.artist} - ` : ""}#{track.id} - {track.status}
+                      #{track.id} - {track.status}
                     </span>
                   </button>
                 ))}
@@ -378,12 +379,12 @@ function AppContent() {
                       <dd>{selectedTrack.title}</dd>
                     </div>
                     <div>
-                      <dt>Artist</dt>
-                      <dd>{selectedTrack.artist || "N/A"}</dd>
+                      <dt>Prompt</dt>
+                      <dd>{selectedTrack.prompt || "N/A"}</dd>
                     </div>
                     <div>
-                      <dt>Album</dt>
-                      <dd>{selectedTrack.album || "N/A"}</dd>
+                      <dt>User ID</dt>
+                      <dd>{selectedTrack.user_id || "N/A"}</dd>
                     </div>
                     <div>
                       <dt>Status</dt>
@@ -394,23 +395,23 @@ function AppContent() {
                       <dd>{selectedTrack.duration_seconds}s</dd>
                     </div>
                     <div>
-                      <dt>Source</dt>
-                      <dd>{selectedTrack.source || "ACE-Step"}</dd>
-                    </div>
-                    <div>
                       <dt>Genre</dt>
                       <dd>{selectedTrack.genre || "N/A"}</dd>
                     </div>
+                    <div>
+                      <dt>Mood</dt>
+                      <dd>{selectedTrack.mood || "N/A"}</dd>
+                    </div>
+                    <div>
+                      <dt>Tempo</dt>
+                      <dd>{selectedTrack.tempo ? `${selectedTrack.tempo} BPM` : "N/A"}</dd>
+                    </div>
                   </dl>
 
-                  <audio controls src={buildAudioUrl(selectedTrack.audio_url)} />
-                  <a href={buildAudioUrl(selectedTrack.audio_url)} target="_blank" rel="noreferrer">
-                    Open audio URL
-                  </a>
-                  {selectedTrack.external_url && (
-                    <a href={selectedTrack.external_url} target="_blank" rel="noreferrer">
-                      Open MusicBrainz page
-                    </a>
+                  {selectedTrackAudioUrl ? (
+                    <audio controls src={selectedTrackAudioUrl} />
+                  ) : (
+                    <p className="empty-state">Metadata-only track. No generated audio file.</p>
                   )}
                 </div>
               )}
