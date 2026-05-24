@@ -1,4 +1,6 @@
+from pathlib import Path
 from typing import Optional
+from urllib.parse import unquote, urlparse
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -8,6 +10,8 @@ from app.database import get_connection
 
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
+
+GENERATED_AUDIO_DIR = Path(__file__).resolve().parents[2] / "generated_audio"
 
 
 class TrackCreate(BaseModel):
@@ -27,6 +31,7 @@ class TrackCreate(BaseModel):
     genre: Optional[str] = None
     mood: Optional[str] = None
     tempo: Optional[int] = None
+    is_public: bool = False
 
 
 class TrackUpdate(BaseModel):
@@ -45,6 +50,11 @@ class TrackUpdate(BaseModel):
     genre: Optional[str] = None
     mood: Optional[str] = None
     tempo: Optional[int] = None
+    is_public: Optional[bool] = None
+
+
+class TrackVisibilityUpdate(BaseModel):
+    is_public: bool
 
 
 def ensure_track_metadata_columns(conn):
@@ -65,18 +75,73 @@ def ensure_track_metadata_columns(conn):
             ADD COLUMN IF NOT EXISTS mood VARCHAR(100),
             ADD COLUMN IF NOT EXISTS tempo INT,
             ADD COLUMN IF NOT EXISTS ai_temperature NUMERIC(3, 2),
-            ADD COLUMN IF NOT EXISTS key_signature VARCHAR(20);
+            ADD COLUMN IF NOT EXISTS key_signature VARCHAR(20),
+            ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE;
             """
         )
 
 
+def is_playable_audio_url(audio_url: Optional[str]) -> bool:
+    if not audio_url:
+        return False
+
+    if audio_url.startswith("http://") or audio_url.startswith("https://"):
+        return True
+
+    parsed_path = unquote(urlparse(audio_url).path)
+    if not parsed_path.startswith("/generated-audio/"):
+        return False
+
+    relative_path = parsed_path.removeprefix("/generated-audio/").lstrip("/")
+    if not relative_path:
+        return False
+
+    audio_path = (GENERATED_AUDIO_DIR / relative_path).resolve()
+    try:
+        audio_path.relative_to(GENERATED_AUDIO_DIR.resolve())
+    except ValueError:
+        return False
+
+    return audio_path.is_file()
+
+
 @router.get("")
-def get_tracks(current_user: dict = Depends(verify_token)):
-    # Manual SQL query. No ORM is used in this project.
+def get_tracks(limit: Optional[int] = None, current_user: dict = Depends(verify_token)):
     with get_connection() as conn:
+        ensure_track_metadata_columns(conn)
         with conn.cursor() as cur:
-            cur.execute("SELECT * FROM tracks ORDER BY id;")
+            if limit:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM tracks
+                    WHERE user_id = %s
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT %s;
+                    """,
+                    (current_user["id"], limit),
+                )
+            else:
+                cur.execute("SELECT * FROM tracks ORDER BY created_at DESC, id DESC;")
             return cur.fetchall()
+
+
+@router.get("/public")
+def get_public_tracks(current_user: dict = Depends(verify_token)):
+    with get_connection() as conn:
+        ensure_track_metadata_columns(conn)
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT *
+                FROM tracks
+                WHERE COALESCE(is_public, FALSE) = TRUE
+                ORDER BY created_at DESC, id DESC;
+                """
+            )
+            tracks = cur.fetchall()
+
+    return [track for track in tracks if is_playable_audio_url(track.get("audio_url"))]
 
 
 @router.get("/{track_id}")
@@ -90,6 +155,33 @@ def get_track(track_id: int, current_user: dict = Depends(verify_token)):
         raise HTTPException(status_code=404, detail="Track not found")
 
     return track
+
+
+@router.patch("/{track_id}/visibility")
+def update_track_visibility(
+    track_id: int,
+    visibility: TrackVisibilityUpdate,
+    current_user: dict = Depends(verify_token),
+):
+    with get_connection() as conn:
+        ensure_track_metadata_columns(conn)
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE tracks
+                SET is_public = %s
+                WHERE id = %s AND user_id = %s
+                RETURNING *;
+                """,
+                (visibility.is_public, track_id, current_user["id"]),
+            )
+            updated_track = cur.fetchone()
+            conn.commit()
+
+    if not updated_track:
+        raise HTTPException(status_code=404, detail="Track not found")
+
+    return updated_track
 
 
 @router.post("")
@@ -115,9 +207,10 @@ def create_track(track: TrackCreate):
                     external_url,
                     genre,
                     mood,
-                    tempo
+                    tempo,
+                    is_public
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING *;
                 """,
                 (
@@ -137,6 +230,7 @@ def create_track(track: TrackCreate):
                     track.genre,
                     track.mood,
                     track.tempo,
+                    track.is_public,
                 ),
             )
             created_track = cur.fetchone()
@@ -175,6 +269,7 @@ def update_track(track_id: int, track: TrackUpdate):
     updated_genre = track.genre if track.genre is not None else existing_track.get("genre")
     updated_mood = track.mood if track.mood is not None else existing_track.get("mood")
     updated_tempo = track.tempo if track.tempo is not None else existing_track.get("tempo")
+    updated_is_public = track.is_public if track.is_public is not None else existing_track.get("is_public")
 
     with get_connection() as conn:
         ensure_track_metadata_columns(conn)
@@ -196,7 +291,8 @@ def update_track(track_id: int, track: TrackUpdate):
                     external_url = %s,
                     genre = %s,
                     mood = %s,
-                    tempo = %s
+                    tempo = %s,
+                    is_public = %s
                 WHERE id = %s
                 RETURNING *;
                 """,
@@ -216,6 +312,7 @@ def update_track(track_id: int, track: TrackUpdate):
                     updated_genre,
                     updated_mood,
                     updated_tempo,
+                    updated_is_public,
                     track_id,
                 ),
             )

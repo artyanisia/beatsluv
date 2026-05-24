@@ -30,6 +30,10 @@ class MusicGenerationError(RuntimeError):
 
 class MusicGeneratorService:
     def generate_track(self, prompt, genre=None, mood=None, tempo=None, duration_seconds=30):
+        return self._real_generate_track(prompt, genre, mood, tempo, duration_seconds)
+
+    def _real_generate_track(self, prompt, genre=None, mood=None, tempo=None, duration_seconds=30):
+        """Original ACE-Step generation method (kept for when service is available)."""
         logger.info("=== STARTING MUSIC GENERATION ===")
         logger.info("Prompt: %s", prompt)
         logger.info("Genre: %s, Mood: %s, Tempo: %s, Duration: %ss", genre, mood, tempo, duration_seconds)

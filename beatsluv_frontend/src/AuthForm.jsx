@@ -142,80 +142,85 @@ const AuthForm = () => {
   };
 
   return (
-    <div className="auth-container">
-      <div className="auth-form">
-        <div className="auth-header">
-          <h1>BeatsLuv</h1>
-          <h2>{isLogin ? 'Sign In' : 'Create Account'}</h2>
-          <p>
-            {isLogin 
-              ? 'Sign in to generate and manage your music tracks' 
-              : 'Join BeatsLuv to start creating amazing music'
-            }
-          </p>
-        </div>
-
-        {error && <div className="error-message">{error}</div>}
-
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="email">Email</label>
-            <input
-              type="email"
-              id="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              placeholder="Enter your email"
-            />
-            {checkingEmail && <span className="field-hint">Checking account...</span>}
-            {accountMessage && <span className="field-warning">{accountMessage}</span>}
+    <div className="vision-auth-page">
+      <div className="vision-auth-card-container">
+        <div className="glass-card vision-auth-card">
+          <div className="auth-header">
+            <h1 className="vision-brand">BeatsLuv</h1>
+            <h2 className="vision-welcome">{isLogin ? 'Welcome Back' : 'Create Account'}</h2>
+            <p className="vision-subtitle">
+              {isLogin 
+                ? 'Enter your email and password to sign in' 
+                : 'Join the future of AI music generation'
+              }
+            </p>
           </div>
 
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              type="password"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              placeholder="Enter your password"
-              minLength="6"
-            />
-          </div>
+          {error && <div className="vision-error-badge">{error}</div>}
 
-          {!isLogin && (
+          <form onSubmit={handleSubmit} className="vision-form">
             <div className="form-group">
-              <label htmlFor="confirmPassword">Confirm Password</label>
+              <label htmlFor="email">Email</label>
+              <input
+                type="email"
+                id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="Your email address"
+                className="vision-input"
+              />
+              {checkingEmail && <span className="field-hint">Checking account...</span>}
+              {accountMessage && <span className="field-warning">{accountMessage}</span>}
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="password">Password</label>
               <input
                 type="password"
-                id="confirmPassword"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                id="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 required
-                placeholder="Confirm your password"
+                placeholder="Your password"
                 minLength="6"
+                className="vision-input"
               />
             </div>
-          )}
 
-          <button type="submit" disabled={shouldDisableSubmit} className="auth-button">
-            {loading ? 'Please wait...' : (isLogin ? 'Sign In' : 'Create Account')}
-          </button>
-        </form>
+            {!isLogin && (
+              <div className="form-group">
+                <label htmlFor="confirmPassword">Confirm Password</label>
+                <input
+                  type="password"
+                  id="confirmPassword"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  placeholder="Confirm your password"
+                  minLength="6"
+                  className="vision-input"
+                />
+              </div>
+            )}
 
-        <div className="auth-toggle">
-          <p>
-            {isLogin ? "Don't have an account? " : 'Already have an account? '}
-            <button 
-              type="button" 
-              onClick={toggleMode} 
-              className="toggle-button"
-            >
-              {isLogin ? 'Sign up' : 'Sign in'}
+            <button type="submit" disabled={shouldDisableSubmit} className="vision-btn-primary">
+              {loading ? 'PLEASE WAIT...' : (isLogin ? 'SIGN IN' : 'SIGN UP')}
             </button>
-          </p>
+          </form>
+
+          <div className="auth-toggle">
+            <p>
+              {isLogin ? "Don't have an account? " : 'Already have an account? '}
+              <button 
+                type="button" 
+                onClick={toggleMode} 
+                className="toggle-link"
+              >
+                {isLogin ? 'Sign up' : 'Sign in'}
+              </button>
+            </p>
+          </div>
         </div>
       </div>
     </div>

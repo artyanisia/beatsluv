@@ -24,7 +24,8 @@ def ensure_track_analytics_columns(conn):
             ADD COLUMN IF NOT EXISTS mood VARCHAR(100),
             ADD COLUMN IF NOT EXISTS tempo INT,
             ADD COLUMN IF NOT EXISTS ai_temperature NUMERIC(3, 2),
-            ADD COLUMN IF NOT EXISTS key_signature VARCHAR(20);
+            ADD COLUMN IF NOT EXISTS key_signature VARCHAR(20),
+            ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE;
             """
         )
 
@@ -37,6 +38,7 @@ class GenerationRequestCreate(BaseModel):
     ai_temperature: Optional[float] = 0.7
     key_signature: Optional[str] = None
     duration_seconds: int = 30
+    is_public: bool = True
 
 
 @router.post("")
@@ -65,7 +67,7 @@ def create_generation_request(
                     duration_seconds,
                     status
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING *;
                 """,
                 (
@@ -90,6 +92,8 @@ def create_generation_request(
                     tempo=request.tempo,
                     duration_seconds=request.duration_seconds,
                 )
+                if not generated_track.get("audio_url"):
+                    raise MusicGenerationError("Music generation finished without an audio file.")
             except MusicGenerationError as exc:
                 logger.exception("Music generation failed")
                 cur.execute(
@@ -119,9 +123,10 @@ def create_generation_request(
                     mood,
                     tempo,
                     ai_temperature,
-                    key_signature
+                    key_signature,
+                    is_public
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING *;
                 """,
                 (
@@ -137,6 +142,7 @@ def create_generation_request(
                     request.tempo,
                     request.ai_temperature,
                     request.key_signature,
+                    request.is_public,
                 ),
             )
             track = cur.fetchone()

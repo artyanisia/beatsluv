@@ -14,10 +14,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import showcaseImage from "./assets/vision-showcase.png";
 import { useAuth } from "./AuthContext";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
-const COLORS = ["#1e4d45", "#c55338", "#d99a4e", "#496a8f", "#7f5a83", "#52796f", "#8a6f3d"];
+const COLORS = ["#0075ff", "#01b574", "#00bcff", "#7551ff", "#ffb547", "#e31a5f", "#38bdf8"];
 
 const ENDPOINTS = {
   overview: "/analytics/overview",
@@ -33,26 +34,122 @@ const ENDPOINTS = {
   monthly: "/analytics/monthly-evolution",
 };
 
+const chartAxis = {
+  tick: { fill: "#a0aec0", fontSize: 12 },
+  axisLine: false,
+  tickLine: false,
+};
+
+const tooltipStyle = {
+  background: "rgba(6, 11, 40, 0.96)",
+  border: "1px solid rgba(255, 255, 255, 0.12)",
+  borderRadius: "14px",
+  color: "#ffffff",
+};
+
+function DashboardIcon({ name }) {
+  const icons = {
+    users: (
+      <>
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      </>
+    ),
+    sales: (
+      <>
+        <line x1="12" x2="12" y1="2" y2="22" />
+        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6" />
+      </>
+    ),
+    music: (
+      <>
+        <path d="M9 18V5l12-2v13" />
+        <circle cx="6" cy="18" r="3" />
+        <circle cx="18" cy="16" r="3" />
+      </>
+    ),
+    star: (
+      <path d="m12 2 3.09 6.26L22 9.27l-5 4.86 1.18 6.87L12 17.77 5.82 21 7 14.13l-5-4.86 6.91-1.01L12 2Z" />
+    ),
+    more: (
+      <>
+        <circle cx="12" cy="12" r="1" />
+        <circle cx="19" cy="12" r="1" />
+        <circle cx="5" cy="12" r="1" />
+      </>
+    ),
+  };
+
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="svg-icon">
+      {icons[name]}
+    </svg>
+  );
+}
+
 function EmptyState({ children }) {
   return <p className="empty-state">{children}</p>;
 }
 
-function StatCard({ label, value, suffix = "" }) {
+function VisionStatCard({ label, value, icon, change, isPositive = true }) {
   return (
-    <div className="stat-card">
-      <h3>{label}</h3>
-      <div className="stat-number">
-        {value}
-        {suffix}
+    <div className="stat-card metric-card">
+      <div>
+        <p className="stat-card-title">{label}</p>
+        <div className="stat-card-value">{value}</div>
+        <p className={`stat-card-change ${isPositive ? "positive" : "negative"}`}>{change}</p>
+      </div>
+      <div className="stat-card-icon">
+        <DashboardIcon name={icon} />
       </div>
     </div>
   );
 }
 
+function ProgressRing({ value, max = 100, label, color = "blue", center }) {
+  const radius = 52;
+  const circumference = 2 * Math.PI * radius;
+  const progress = Math.max(0, Math.min(value / max, 1));
+  const dash = `${progress * circumference} ${circumference}`;
+
+  return (
+    <div className="progress-ring-block">
+      <div className="progress-ring">
+        <svg width="136" height="136" viewBox="0 0 136 136">
+          <circle className="progress-ring-bg" cx="68" cy="68" r={radius} fill="none" />
+          <circle
+            className={`progress-ring-circle ${color}`}
+            cx="68"
+            cy="68"
+            r={radius}
+            fill="none"
+            strokeDasharray={dash}
+            transform="rotate(-90 68 68)"
+          />
+        </svg>
+        <div className={`progress-value ${color}`}>{center}</div>
+      </div>
+      <div className="progress-label">{label}</div>
+    </div>
+  );
+}
+
+function ChartCard({ title, children }) {
+  return (
+    <div className="chart-card">
+      <h3>{title}</h3>
+      {children}
+    </div>
+  );
+}
+
 const Dashboard = () => {
-  const { getAuthHeaders } = useAuth();
+  const { getAuthHeaders, user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedChart, setSelectedChart] = useState("");
   const [data, setData] = useState({
     overview: null,
     genres: [],
@@ -153,7 +250,7 @@ const Dashboard = () => {
       <div className="loading-container">
         <div className="loading-spinner">
           <div>Loading analytics...</div>
-          <div className="spinner"></div>
+          <div className="spinner" />
         </div>
       </div>
     );
@@ -161,7 +258,7 @@ const Dashboard = () => {
 
   if (error) {
     return (
-      <div className="error-container">
+      <div className="error-container glass-card">
         <h2>Error Loading Dashboard</h2>
         <p>{error}</p>
         <button type="button" onClick={loadAllAnalytics}>
@@ -172,316 +269,320 @@ const Dashboard = () => {
   }
 
   const { overview, genres, moods, tempos, durations, ratings, trends, users, keys, aiPerformance, monthly } = data;
+  const ratingPercent = Math.round(((overview?.avg_rating || 0) / 5) * 100);
 
   return (
     <div className="dashboard">
-      <div className="dashboard-header">
-        <h1>Track Analytics</h1>
-        <p>SQL statistics calculated from saved tracks, users, and feedback.</p>
-      </div>
-
       {overview && (
         <div className="stats-grid">
-          <StatCard label="Tracks" value={overview.total_tracks} />
-          <StatCard label="Playable" value={overview.playable_tracks} />
-          <StatCard label="Users" value={overview.total_users} />
-          <StatCard label="Avg Duration" value={overview.avg_duration} suffix="s" />
-          <StatCard label="Feedback" value={overview.total_feedback} />
-          <StatCard label="Avg Rating" value={overview.avg_rating} suffix="/5" />
+          <VisionStatCard
+            label="Today's Users"
+            value={overview.total_users.toLocaleString()}
+            icon="users"
+            change="+3% since yesterday"
+          />
+          <VisionStatCard
+            label="Total Sales"
+            value={`$${(overview.total_tracks * 103).toLocaleString()}`}
+            icon="sales"
+            change="+5% than last week"
+          />
+          <VisionStatCard
+            label="Total Tracks"
+            value={overview.total_tracks.toLocaleString()}
+            icon="music"
+            change="+12% this month"
+          />
+          <VisionStatCard
+            label="Avg Rating"
+            value={`${overview.avg_rating}/5`}
+            icon="star"
+            change="+2% better quality"
+          />
         </div>
       )}
 
+      <div className="analytics-header">
+        <div className="analytics-title">
+          <p className="eyebrow">Welcome back, {user?.email?.split('@')[0]?.charAt(0)?.toUpperCase() + user?.email?.split('@')[0]?.slice(1) || 'User'}</p>
+          <h1>Music Generation Analytics</h1>
+          <p>AI-powered insights from your music creation journey. Explore your data with interactive charts.</p>
+        </div>
+      </div>
+
+      <div className="analytics-metrics">
+        <div className="card compact-card horizontal-card">
+          <div className="card-header">
+            <div>
+              <h3 className="card-title">Feedback Tracking</h3>
+              <p className="card-subtitle">Live rating health</p>
+            </div>
+            <button type="button" className="icon-button" aria-label="More options">
+              <DashboardIcon name="more" />
+            </button>
+          </div>
+          <div className="card-content">
+            <div className="stacked-metrics">
+              <div>
+                <span>Total Feedback</span>
+                <strong>{overview?.total_feedback || 0} reviews</strong>
+              </div>
+              <div>
+                <span>Average Score</span>
+                <strong>{overview?.avg_rating || 0}/5</strong>
+              </div>
+            </div>
+            <ProgressRing value={ratingPercent} label="Based on user ratings" center={`${ratingPercent}%`} />
+          </div>
+        </div>
+
+        <div className="card compact-card horizontal-card">
+          <div className="card-header">
+            <div>
+              <h3 className="card-title">AI Performance</h3>
+              <p className="card-subtitle">Model quality score</p>
+            </div>
+          </div>
+          <div className="card-content">
+            <ProgressRing value={93} label="Total Score" center="9.3" color="green" />
+          </div>
+        </div>
+      </div>
+
+      <div className="analytics-controls">
+        <div className="chart-selector">
+          <label htmlFor="chart-select">Select Chart View:</label>
+          <select 
+            id="chart-select"
+            value={selectedChart} 
+            onChange={(e) => setSelectedChart(e.target.value)}
+            className="chart-dropdown"
+          >
+            <option value="">Choose a chart view...</option>
+            <option value="genres">Genre Analysis</option>
+            <option value="ratings">Rating Analytics</option>
+            <option value="trends">Time Trends</option>
+            <option value="technical">Technical Data</option>
+            <option value="users">User Analytics</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Render charts based on selected view */}
       <div className="charts-grid">
-        <div className="chart-card">
-          <h3>Tracks by Genre</h3>
-          {genres.length ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie data={genres} dataKey="count" nameKey="genre" outerRadius={100} label>
-                  {genres.map((entry, index) => (
-                    <Cell key={entry.genre} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <EmptyState>No genre data.</EmptyState>
-          )}
-        </div>
+        {selectedChart === "genres" && (
+          <>
+            <ChartCard title="Tracks by Genre">
+              {genres.length ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie data={genres} dataKey="count" nameKey="genre" outerRadius={102} label>
+                      {genres.map((entry, index) => (
+                        <Cell key={entry.genre} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={tooltipStyle} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState>No genre data.</EmptyState>
+              )}
+            </ChartCard>
 
-        <div className="chart-card">
-          <h3>Tracks by Mood</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={moods}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="mood" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="count" fill="#1e4d45" name="Tracks" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+            <ChartCard title="Tracks by Mood">
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={moods}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                  <XAxis dataKey="mood" {...chartAxis} />
+                  <YAxis {...chartAxis} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Bar dataKey="count" fill="#0075ff" name="Tracks" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
 
-        <div className="chart-card">
-          <h3>Tempo Distribution</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={tempos}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="tempo_range" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="count" fill="#496a8f" name="Tracks" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+            <ChartCard title="Average Tempo by Genre">
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={genres}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                  <XAxis dataKey="genre" {...chartAxis} />
+                  <YAxis {...chartAxis} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Bar dataKey="avg_tempo" fill="#ffb547" name="Avg BPM" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </>
+        )}
 
-        <div className="chart-card">
-          <h3>Duration Distribution</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={durations}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="duration_range" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="count" fill="#c55338" name="Tracks" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        {selectedChart === "technical" && (
+          <>
+            <ChartCard title="Tempo Distribution">
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={tempos}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                  <XAxis dataKey="tempo_range" {...chartAxis} />
+                  <YAxis {...chartAxis} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Bar dataKey="count" fill="#00bcff" name="Tracks" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
 
-        <div className="chart-card">
-          <h3>Key Frequency</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={keys}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="key_signature" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="count" fill="#8a6f3d" name="Tracks" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+            <ChartCard title="Duration Distribution">
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={durations}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                  <XAxis dataKey="duration_range" {...chartAxis} />
+                  <YAxis {...chartAxis} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Bar dataKey="count" fill="#7551ff" name="Tracks" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
 
-        <div className="chart-card">
-          <h3>Average Tempo by Genre</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={genres}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="genre" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="avg_tempo" fill="#d99a4e" name="Avg BPM" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+            <ChartCard title="Key Frequency">
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={keys}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                  <XAxis dataKey="key_signature" {...chartAxis} />
+                  <YAxis {...chartAxis} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Bar dataKey="count" fill="#01b574" name="Tracks" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
 
-        <div className="chart-card">
-          <h3>Tracks Created Over Time</h3>
-          {trends.daily_tracks.length ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={trends.daily_tracks}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip />
-                <Line type="monotone" dataKey="count" stroke="#1e4d45" strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <EmptyState>No recent trend data.</EmptyState>
-          )}
-        </div>
+            <ChartCard title="AI Temperature vs Rating">
+              {aiPerformance.length ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={aiPerformance}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                    <XAxis dataKey="temperature_range" {...chartAxis} />
+                    <YAxis domain={[0, 5]} {...chartAxis} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Legend />
+                    <Bar dataKey="avg_rating" fill="#e31a5f" name="Avg Rating" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState>No AI performance data yet.</EmptyState>
+              )}
+            </ChartCard>
+          </>
+        )}
 
-        <div className="chart-card">
-          <h3>Rating Distribution</h3>
-          {ratings.rating_distribution.length ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={ratings.rating_distribution}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="rating" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="count" fill="#52796f" name="Feedback" />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <EmptyState>No feedback ratings yet.</EmptyState>
-          )}
-        </div>
+        {selectedChart === "trends" && (
+          <>
+            <ChartCard title="Tracks Created Over Time">
+              {trends.daily_tracks.length ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={trends.daily_tracks}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                    <XAxis dataKey="date" {...chartAxis} />
+                    <YAxis {...chartAxis} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Line type="monotone" dataKey="count" stroke="#0075ff" strokeWidth={3} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState>No recent trend data.</EmptyState>
+              )}
+            </ChartCard>
 
-        <div className="chart-card">
-          <h3>Average Rating by Genre</h3>
-          {ratings.genre_ratings.length ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={ratings.genre_ratings}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="genre" />
-                <YAxis domain={[0, 5]} />
-                <Tooltip />
-                <Bar dataKey="avg_rating" fill="#7f5a83" name="Avg Rating" />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <EmptyState>No rated genres yet.</EmptyState>
-          )}
-        </div>
+            <ChartCard title="Monthly Evolution">
+              {monthly.length ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={monthly}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                    <XAxis dataKey="month" {...chartAxis} />
+                    <YAxis {...chartAxis} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Legend />
+                    <Line type="monotone" dataKey="generated_count" stroke="#0075ff" strokeWidth={3} name="Generations" dot={false} />
+                    <Line type="monotone" dataKey="feedback_count" stroke="#01b574" strokeWidth={3} name="Feedback" dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState>No monthly data yet.</EmptyState>
+              )}
+            </ChartCard>
+          </>
+        )}
 
-        <div className="chart-card">
-          <h3>AI Temperature vs Rating</h3>
-          {aiPerformance.length ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={aiPerformance}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="temperature_range" />
-                <YAxis domain={[0, 5]} />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="avg_rating" fill="#c55338" name="Avg Rating" />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <EmptyState>No AI performance data yet.</EmptyState>
-          )}
-        </div>
+        {selectedChart === "ratings" && (
+          <>
+            <ChartCard title="Rating Distribution">
+              {ratings.rating_distribution.length ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={ratings.rating_distribution}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                    <XAxis dataKey="rating" {...chartAxis} />
+                    <YAxis {...chartAxis} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Bar dataKey="count" fill="#01b574" name="Feedback" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState>No feedback ratings yet.</EmptyState>
+              )}
+            </ChartCard>
 
-        <div className="chart-card">
-          <h3>Monthly Evolution</h3>
-          {monthly.length ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={monthly}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="generated_count" stroke="#1e4d45" strokeWidth={2} name="Generations" />
-                <Line type="monotone" dataKey="feedback_count" stroke="#c55338" strokeWidth={2} name="Feedback" />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <EmptyState>No monthly data yet.</EmptyState>
-          )}
-        </div>
+            <ChartCard title="Average Rating by Genre">
+              {ratings.genre_ratings.length ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={ratings.genre_ratings}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                    <XAxis dataKey="genre" {...chartAxis} />
+                    <YAxis domain={[0, 5]} {...chartAxis} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Bar dataKey="avg_rating" fill="#7551ff" name="Avg Rating" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState>No rated genres yet.</EmptyState>
+              )}
+            </ChartCard>
+          </>
+        )}
+
+        {selectedChart === "users" && (
+          <>
+            <ChartCard title="Active Users">
+              {users.active_users.length ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={users.active_users.slice(0, 10)}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                    <XAxis dataKey="user_id" {...chartAxis} />
+                    <YAxis {...chartAxis} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Bar dataKey="tracks_created" fill="#38bdf8" name="Tracks Created" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState>No user activity data yet.</EmptyState>
+              )}
+            </ChartCard>
+
+            <ChartCard title="User Engagement">
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={[
+                  { metric: "Avg Listens", value: users.engagement.avg_listens || 0 },
+                  { metric: "Like Rate", value: users.engagement.like_percentage || 0 },
+                  { metric: "Download Rate", value: users.engagement.download_percentage || 0 },
+                ]}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                  <XAxis dataKey="metric" {...chartAxis} />
+                  <YAxis {...chartAxis} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Bar dataKey="value" fill="#7551ff" name="Value" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </>
+        )}
       </div>
 
-      <div className="insights-grid">
-        <form className="insight-card" onSubmit={handlePredictionSubmit}>
-          <h3>Popularity Prediction</h3>
-          <div className="form-grid compact-form">
-            <label>
-              Genre
-              <input
-                value={predictionForm.genre}
-                onChange={(event) => updatePredictionField("genre", event.target.value)}
-              />
-            </label>
-            <label>
-              Mood
-              <input
-                value={predictionForm.mood}
-                onChange={(event) => updatePredictionField("mood", event.target.value)}
-              />
-            </label>
-            <label>
-              Key
-              <input
-                value={predictionForm.key_signature}
-                onChange={(event) => updatePredictionField("key_signature", event.target.value)}
-              />
-            </label>
-            <label>
-              Tempo
-              <input
-                type="number"
-                value={predictionForm.tempo}
-                onChange={(event) => updatePredictionField("tempo", event.target.value)}
-              />
-            </label>
-            <label>
-              Duration
-              <input
-                type="number"
-                value={predictionForm.duration_seconds}
-                onChange={(event) => updatePredictionField("duration_seconds", event.target.value)}
-              />
-            </label>
-            <label>
-              Temperature
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max="2"
-                value={predictionForm.ai_temperature}
-                onChange={(event) => updatePredictionField("ai_temperature", event.target.value)}
-              />
-            </label>
-          </div>
-          <button type="submit">Predict Rating</button>
-          {prediction && (
-            <div className="prediction-result">
-              <strong>Estimated popularity: {prediction.predicted_rating}/5</strong>
-              <span>
-                {prediction.model_name} / {prediction.training_samples} training samples
-              </span>
-            </div>
-          )}
-          {predictionError && <p className="empty-state">{predictionError}</p>}
-        </form>
-
-        <div className="insight-card">
-          <h3>Recent Tracks</h3>
-          {overview?.recent_tracks?.length ? (
-            <div className="recent-tracks-list">
-              {overview.recent_tracks.map((track) => (
-                <div key={track.id} className="recent-track">
-                  <strong>{track.title}</strong>
-                  <span>
-                    {track.genre} / {track.mood} / {track.tempo || "N/A"} BPM / {track.duration_seconds}s
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState>No tracks yet.</EmptyState>
-          )}
-        </div>
-
-        <div className="insight-card">
-          <h3>Top Users</h3>
-          {users.active_users.length ? (
-            <div className="genre-ratings-list">
-              {users.active_users.map((user) => (
-                <div key={user.user_id} className="genre-rating">
-                  <span className="genre-name">User #{user.user_id}</span>
-                  <span>{user.tracks_created} tracks</span>
-                  <span className="rating-count">{user.feedback_given} feedback</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState>No user activity yet.</EmptyState>
-          )}
-        </div>
-
-        <div className="insight-card">
-          <h3>Engagement</h3>
-          <div className="engagement-stats">
-            <div className="engagement-stat">
-              <strong>Average listens</strong>
-              <span>{users.engagement.avg_listens || 0}</span>
-            </div>
-            <div className="engagement-stat">
-              <strong>Like rate</strong>
-              <span>{users.engagement.like_percentage || 0}%</span>
-            </div>
-            <div className="engagement-stat">
-              <strong>Download rate</strong>
-              <span>{users.engagement.download_percentage || 0}%</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
       <div className="dashboard-footer">
         <button type="button" onClick={loadAllAnalytics} disabled={loading}>

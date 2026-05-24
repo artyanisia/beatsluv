@@ -1,8 +1,5 @@
-SELECT *
-FROM users;
-SELECT *
-FROM generation_requests;
-SELECT *
-FROM tracks;
-SELECT *
-FROM feedback;
+ALTER TABLE tracks
+ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE;
+UPDATE tracks
+SET is_public = TRUE
+WHERE is_public IS NULL;

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import admin, analytics, auth, feedback, generation_requests, predictions, tracks
+from app.routers import admin, analytics, auth, feedback, generation_requests, predictions, tracks, users
 
 
 app = FastAPI(title="BeatsLuv API")
@@ -19,6 +19,18 @@ app.add_middleware(
         "http://127.0.0.1:5174",
         "http://localhost:5175",
         "http://127.0.0.1:5175",
+        "http://localhost:5176",
+        "http://127.0.0.1:5176",
+        "http://localhost:5177",
+        "http://127.0.0.1:5177",
+        "http://localhost:5178",
+        "http://127.0.0.1:5178",
+        "http://localhost:5179",
+        "http://127.0.0.1:5179",
+        "http://localhost:5180",
+        "http://127.0.0.1:5180",
+        "http://localhost:5181",
+        "http://127.0.0.1:5181",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -45,3 +57,4 @@ app.include_router(feedback.router)
 app.include_router(analytics.router)
 app.include_router(predictions.router)
 app.include_router(admin.router)
+app.include_router(users.router)
