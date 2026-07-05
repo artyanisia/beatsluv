@@ -1,5 +1,0 @@
-ALTER TABLE tracks
-ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE;
-UPDATE tracks
-SET is_public = TRUE
-WHERE is_public IS NULL;

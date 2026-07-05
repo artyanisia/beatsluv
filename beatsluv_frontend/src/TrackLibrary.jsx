@@ -61,6 +61,11 @@ function buildAudioUrl(audioUrl) {
 function FeedbackModal({ track, isOpen, onClose, onSubmit }) {
   const [feedbackForm, setFeedbackForm] = useState({
     rating: 5,
+    melody_rating: 5,
+    originality_rating: 5,
+    emotional_impact_rating: 5,
+    commercial_potential_rating: 5,
+    production_quality_rating: 5,
     comment: "",
     liked: true,
     downloaded: false,
@@ -68,6 +73,13 @@ function FeedbackModal({ track, isOpen, onClose, onSubmit }) {
     listen_count: 1,
     sentiment_score: 0.8,
   });
+  const feedbackCriterii = [
+    ["melody_rating", "Melodie"],
+    ["originality_rating", "Originalitate"],
+    ["emotional_impact_rating", "Impact emotional"],
+    ["commercial_potential_rating", "Potential comercial"],
+    ["production_quality_rating", "Calitate productie"],
+  ];
 
   function updateFeedbackField(field, value) {
     setFeedbackForm((current) => ({
@@ -88,7 +100,7 @@ function FeedbackModal({ track, isOpen, onClose, onSubmit }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Give Feedback: {track.title}</h3>
+          <h3>Ofera feedback: {track.title}</h3>
           <button type="button" className="modal-close" onClick={onClose}>
             <Icon name="close" />
           </button>
@@ -109,7 +121,7 @@ function FeedbackModal({ track, isOpen, onClose, onSubmit }) {
               </div>
 
               <div className="form-group">
-                <label htmlFor="listen-count">Listen Count</label>
+                <label htmlFor="listen-count">Numar ascultari</label>
                 <input
                   id="listen-count"
                   type="number"
@@ -120,14 +132,31 @@ function FeedbackModal({ track, isOpen, onClose, onSubmit }) {
               </div>
             </div>
 
+            <div className="structured-rating-grid">
+              {feedbackCriterii.map(([field, label]) => (
+                <div className="form-group" key={field}>
+                  <label htmlFor={`modal-${field}`}>{label}</label>
+                  <input
+                    id={`modal-${field}`}
+                    type="range"
+                    min="1"
+                    max="5"
+                    value={feedbackForm[field]}
+                    onChange={(event) => updateFeedbackField(field, event.target.value)}
+                  />
+                  <span className="rating-text">{feedbackForm[field]}/5</span>
+                </div>
+              ))}
+            </div>
+
             <div className="form-group">
-              <label htmlFor="feedback-comment">Comment</label>
+              <label htmlFor="feedback-comment">Comentariu</label>
               <textarea
                 id="feedback-comment"
                 rows="3"
                 value={feedbackForm.comment}
                 onChange={(event) => updateFeedbackField("comment", event.target.value)}
-                placeholder="Share your thoughts about this track..."
+                placeholder="Scrie ce parere ai despre aceasta piesa..."
               />
             </div>
 
@@ -138,7 +167,7 @@ function FeedbackModal({ track, isOpen, onClose, onSubmit }) {
                   checked={feedbackForm.liked}
                   onChange={(event) => updateFeedbackField("liked", event.target.checked)}
                 />
-                Liked
+                Apreciata
               </label>
               <label>
                 <input
@@ -146,7 +175,7 @@ function FeedbackModal({ track, isOpen, onClose, onSubmit }) {
                   checked={feedbackForm.downloaded}
                   onChange={(event) => updateFeedbackField("downloaded", event.target.checked)}
                 />
-                Downloaded
+                Descarcata
               </label>
               <label>
                 <input
@@ -154,15 +183,15 @@ function FeedbackModal({ track, isOpen, onClose, onSubmit }) {
                   checked={feedbackForm.shared}
                   onChange={(event) => updateFeedbackField("shared", event.target.checked)}
                 />
-                Shared
+                Distribuita
               </label>
             </div>
 
             <div className="modal-actions">
               <button type="button" onClick={onClose} className="btn-secondary">
-                Cancel
+                Anuleaza
               </button>
-              <button type="submit">Save Feedback</button>
+              <button type="submit">Salveaza feedback</button>
             </div>
           </form>
         </div>
@@ -173,10 +202,10 @@ function FeedbackModal({ track, isOpen, onClose, onSubmit }) {
 
 const TrackLibrary = () => {
   const { getAuthHeaders } = useAuth();
-  const [tracks, setTracks] = useState([]);
-  const [filteredTracks, setFilteredTracks] = useState([]);
+  const [tracks, setPiese] = useState([]);
+  const [filteredPiese, setFilteredPiese] = useState([]);
   const [selectedTrack, setSelectedTrack] = useState(null);
-  const [isLoadingTracks, setIsLoadingTracks] = useState(false);
+  const [isLoadingPiese, setIsLoadingPiese] = useState(false);
   const [message, setMessage] = useState("");
   const [appAlert, setAppAlert] = useState(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
@@ -186,19 +215,25 @@ const TrackLibrary = () => {
     search: "",
     genre: "",
     mood: "",
+    creator: "",
+    minTempo: "",
+    maxTempo: "",
+    minRating: "",
+    createdAfter: "",
+    createdBefore: "",
     sortBy: "created_at",
   });
 
   useEffect(() => {
-    fetchTracks();
+    fetchPiese();
   }, []);
 
   useEffect(() => {
     applyFilters();
   }, [tracks, filters]);
 
-  async function fetchTracks() {
-    setIsLoadingTracks(true);
+  async function fetchPiese() {
+    setIsLoadingPiese(true);
     setMessage("");
 
     try {
@@ -208,11 +243,11 @@ const TrackLibrary = () => {
         },
       });
       if (!response.ok) {
-        throw new Error("Could not load public tracks.");
+        throw new Error("Nu s-au putut incarca piesele publice.");
       }
 
       const data = await response.json();
-      setTracks(data);
+      setPiese(data);
 
       if (data.length === 0) {
         setSelectedTrack(null);
@@ -222,30 +257,57 @@ const TrackLibrary = () => {
     } catch (error) {
       setMessage(error.message);
     } finally {
-      setIsLoadingTracks(false);
+      setIsLoadingPiese(false);
     }
   }
 
   function applyFilters() {
     let filtered = [...tracks];
 
-    // Search filter
+    // Cauta filter
     if (filters.search) {
       filtered = filtered.filter(
         (track) =>
           track.title?.toLowerCase().includes(filters.search.toLowerCase()) ||
-          track.prompt?.toLowerCase().includes(filters.search.toLowerCase())
+          track.prompt?.toLowerCase().includes(filters.search.toLowerCase()) ||
+          track.creator_email?.toLowerCase().includes(filters.search.toLowerCase())
       );
     }
 
-    // Genre filter
+    // Gen filter
     if (filters.genre) {
       filtered = filtered.filter((track) => track.genre === filters.genre);
     }
 
-    // Mood filter
+    // Stare filter
     if (filters.mood) {
       filtered = filtered.filter((track) => track.mood === filters.mood);
+    }
+
+    if (filters.creator) {
+      filtered = filtered.filter((track) =>
+        track.creator_email?.toLowerCase().includes(filters.creator.toLowerCase())
+      );
+    }
+
+    if (filters.minTempo) {
+      filtered = filtered.filter((track) => Number(track.tempo || 0) >= Number(filters.minTempo));
+    }
+
+    if (filters.maxTempo) {
+      filtered = filtered.filter((track) => Number(track.tempo || 0) <= Number(filters.maxTempo));
+    }
+
+    if (filters.minRating) {
+      filtered = filtered.filter((track) => Number(track.avg_rating || 0) >= Number(filters.minRating));
+    }
+
+    if (filters.createdAfter) {
+      filtered = filtered.filter((track) => new Date(track.created_at) >= new Date(filters.createdAfter));
+    }
+
+    if (filters.createdBefore) {
+      filtered = filtered.filter((track) => new Date(track.created_at) <= new Date(filters.createdBefore));
     }
 
     // Sort
@@ -257,12 +319,14 @@ const TrackLibrary = () => {
           return (b.duration_seconds || 0) - (a.duration_seconds || 0);
         case "tempo":
           return (b.tempo || 0) - (a.tempo || 0);
+        case "rating":
+          return (b.avg_rating || 0) - (a.avg_rating || 0);
         default: // created_at
           return new Date(b.created_at || 0) - new Date(a.created_at || 0);
       }
     });
 
-    setFilteredTracks(filtered);
+    setFilteredPiese(filtered);
   }
 
   function updateFilter(field, value) {
@@ -283,6 +347,11 @@ const TrackLibrary = () => {
     const payload = {
       ...feedbackData,
       rating: feedbackData.rating ? Number(feedbackData.rating) : null,
+      melody_rating: Number(feedbackData.melody_rating),
+      originality_rating: Number(feedbackData.originality_rating),
+      emotional_impact_rating: Number(feedbackData.emotional_impact_rating),
+      commercial_potential_rating: Number(feedbackData.commercial_potential_rating),
+      production_quality_rating: Number(feedbackData.production_quality_rating),
       listen_count: Number(feedbackData.listen_count),
       sentiment_score: feedbackData.sentiment_score ? Number(feedbackData.sentiment_score) : null,
     };
@@ -299,12 +368,12 @@ const TrackLibrary = () => {
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.detail || "Feedback request failed.");
+        throw new Error(data.detail || "Cererea de feedback a esuat.");
       }
 
       setAppAlert({
-        title: "Feedback Saved",
-        message: `Your feedback for "${feedbackTrack.title}" was saved.`,
+        title: "Feedback salvat",
+        message: `Feedbackul pentru "${feedbackTrack.title}" a fost salvat.`,
       });
       setShowFeedbackModal(false);
       setFeedbackTrack(null);
@@ -314,8 +383,8 @@ const TrackLibrary = () => {
   }
 
   // Get unique values for filters
-  const uniqueGenres = [...new Set(tracks.map((track) => track.genre).filter(Boolean))];
-  const uniqueMoods = [...new Set(tracks.map((track) => track.mood).filter(Boolean))];
+  const uniqueGens = [...new Set(tracks.map((track) => track.genre).filter(Boolean))];
+  const uniqueStares = [...new Set(tracks.map((track) => track.mood).filter(Boolean))];
   return (
     <div className="track-library">
       {message && <div className="status-message">{message}</div>}
@@ -337,22 +406,22 @@ const TrackLibrary = () => {
           <div className="card">
             <div className="card-header">
               <div>
-                <h3 className="card-title">Filters & Search</h3>
-                <p className="card-subtitle">Find your perfect track</p>
+                <h3 className="card-title">Filtre si cautare</h3>
+                <p className="card-subtitle">Gaseste piesa potrivita</p>
               </div>
             </div>
             <div className="card-content">
               <div className="filters-layout">
                 <div className="search-section">
                   <div className="form-group">
-                    <label htmlFor="search">Search</label>
+                    <label htmlFor="search">Cautare</label>
                     <div className="search-input-wrapper">
                       <Icon name="search" className="search-icon-input" />
                       <input
                         id="search"
                         value={filters.search}
                         onChange={(e) => updateFilter("search", e.target.value)}
-                        placeholder="Search tracks by title or prompt..."
+                        placeholder="Cauta piese dupa titlu sau prompt..."
                         className="search-input"
                       />
                     </div>
@@ -361,14 +430,14 @@ const TrackLibrary = () => {
 
                 <div className="filters-columns">
                   <div className="form-group">
-                    <label htmlFor="genre-filter">Genre</label>
+                    <label htmlFor="genre-filter">Gen</label>
                     <select
                       id="genre-filter"
                       value={filters.genre}
                       onChange={(e) => updateFilter("genre", e.target.value)}
                     >
-                      <option value="">All Genres</option>
-                      {uniqueGenres.map((genre) => (
+                      <option value="">Toate genurile</option>
+                      {uniqueGens.map((genre) => (
                         <option key={genre} value={genre}>
                           {genre}
                         </option>
@@ -377,14 +446,14 @@ const TrackLibrary = () => {
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="mood-filter">Mood</label>
+                    <label htmlFor="mood-filter">Stare</label>
                     <select
                       id="mood-filter"
                       value={filters.mood}
                       onChange={(e) => updateFilter("mood", e.target.value)}
                     >
-                      <option value="">All Moods</option>
-                      {uniqueMoods.map((mood) => (
+                      <option value="">Toate starile</option>
+                      {uniqueStares.map((mood) => (
                         <option key={mood} value={mood}>
                           {mood}
                         </option>
@@ -393,17 +462,78 @@ const TrackLibrary = () => {
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="sort-filter">Sort By</label>
+                    <label htmlFor="sort-filter">Sorteaza dupa</label>
                     <select
                       id="sort-filter"
                       value={filters.sortBy}
                       onChange={(e) => updateFilter("sortBy", e.target.value)}
                     >
-                      <option value="created_at">Newest First</option>
-                      <option value="title">Title</option>
-                      <option value="duration">Duration</option>
+                      <option value="created_at">Cele mai noi</option>
+                      <option value="title">Titlu</option>
+                      <option value="duration">Durata</option>
                       <option value="tempo">Tempo</option>
+                      <option value="rating">Rating</option>
                     </select>
+                  </div>
+                </div>
+
+                <div className="filters-columns advanced-filters">
+                  <div className="form-group">
+                    <label htmlFor="creator-filter">Creator</label>
+                    <input
+                      id="creator-filter"
+                      value={filters.creator}
+                      onChange={(e) => updateFilter("creator", e.target.value)}
+                      placeholder="email creator"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="min-tempo">Min BPM</label>
+                    <input
+                      id="min-tempo"
+                      type="number"
+                      value={filters.minTempo}
+                      onChange={(e) => updateFilter("minTempo", e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="max-tempo">Max BPM</label>
+                    <input
+                      id="max-tempo"
+                      type="number"
+                      value={filters.maxTempo}
+                      onChange={(e) => updateFilter("maxTempo", e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="min-rating">Rating minim</label>
+                    <input
+                      id="min-rating"
+                      type="number"
+                      min="1"
+                      max="5"
+                      step="0.1"
+                      value={filters.minRating}
+                      onChange={(e) => updateFilter("minRating", e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="created-after">Creat dupa</label>
+                    <input
+                      id="created-after"
+                      type="date"
+                      value={filters.createdAfter}
+                      onChange={(e) => updateFilter("createdAfter", e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="created-before">Creat inainte de</label>
+                    <input
+                      id="created-before"
+                      type="date"
+                      value={filters.createdBefore}
+                      onChange={(e) => updateFilter("createdBefore", e.target.value)}
+                    />
                   </div>
                 </div>
               </div>
@@ -414,28 +544,28 @@ const TrackLibrary = () => {
           <div className="card">
             <div className="card-header">
               <div>
-                <h3 className="card-title">Public Tracks</h3>
+                <h3 className="card-title">Piese publice</h3>
                 <p className="card-subtitle">
-                  {filteredTracks.length} of {tracks.length} tracks
+                  {filteredPiese.length} din {tracks.length} piese
                 </p>
               </div>
-              <button type="button" onClick={fetchTracks} disabled={isLoadingTracks} className="btn-secondary">
-                {isLoadingTracks ? "Loading..." : "Refresh"}
+              <button type="button" onClick={fetchPiese} disabled={isLoadingPiese} className="btn-secondary">
+                {isLoadingPiese ? "Se incarca..." : "Actualizeaza"}
               </button>
             </div>
             <div className="card-content">
-              {isLoadingTracks ? (
+              {isLoadingPiese ? (
                 <div className="loading-spinner">
                   <div className="spinner" />
-                  <span>Loading tracks...</span>
+                  <span>Se incarca piesele...</span>
                 </div>
-              ) : filteredTracks.length === 0 ? (
+              ) : filteredPiese.length === 0 ? (
                 <div className="empty-state">
-                  <p>No tracks found matching your filters.</p>
+                  <p>Nu au fost gasite piese pentru filtrele alese.</p>
                 </div>
               ) : (
                 <div className="tracks-grid">
-                  {filteredTracks.map((track) => (
+                  {filteredPiese.map((track) => (
                     <div
                       key={track.id}
                       className={`track-card ${selectedTrack?.id === track.id ? "selected" : ""}`}
@@ -447,12 +577,14 @@ const TrackLibrary = () => {
                       
                       <div className="track-meta">
                         <span>#{track.id}</span>
-                        <span>{track.genre || "N/A"}</span>
-                        <span>{track.mood || "N/A"}</span>
+                        <span>{track.genre || "Indisponibil"}</span>
+                        <span>{track.mood || "Indisponibil"}</span>
                         <span>{track.duration_seconds}s</span>
                         {track.tempo && <span>{track.tempo} BPM</span>}
+                        <span>{track.avg_rating ? `${track.avg_rating}/5` : "Fara rating"}</span>
+                        {track.creator_email && <span>{track.creator_email}</span>}
                         <span className={`visibility-badge ${track.is_public ? 'public' : 'private'}`}>
-                          {track.is_public ? "Public" : "Private"}
+                          {track.is_public ? "Public" : "Privat"}
                         </span>
                       </div>
 
@@ -479,7 +611,7 @@ const TrackLibrary = () => {
                           }}
                         >
                           <Icon name="heart" />
-                          Give Feedback
+                          Ofera feedback
                         </button>
                       </div>
                     </div>
@@ -490,13 +622,13 @@ const TrackLibrary = () => {
           </div>
         </div>
 
-        {/* Selected Track Details */}
+        {/* Selected Detalii piesa */}
         {selectedTrack && (
           <div className="track-library-sidebar">
             <div className="card">
               <div className="card-header">
                 <div>
-                  <h3 className="card-title">Track Details</h3>
+                  <h3 className="card-title">Detalii piesa</h3>
                   <p className="card-subtitle">{selectedTrack.title}</p>
                 </div>
               </div>
@@ -507,23 +639,35 @@ const TrackLibrary = () => {
                     <strong>#{selectedTrack.id}</strong>
                   </div>
                   <div>
-                    <span>Genre</span>
-                    <strong>{selectedTrack.genre || "N/A"}</strong>
+                    <span>Gen</span>
+                    <strong>{selectedTrack.genre || "Indisponibil"}</strong>
                   </div>
                   <div>
-                    <span>Mood</span>
-                    <strong>{selectedTrack.mood || "N/A"}</strong>
+                    <span>Stare</span>
+                    <strong>{selectedTrack.mood || "Indisponibil"}</strong>
                   </div>
                   <div>
-                    <span>Duration</span>
+                    <span>Durata</span>
                     <strong>{selectedTrack.duration_seconds}s</strong>
                   </div>
                   <div>
                     <span>Tempo</span>
-                    <strong>{selectedTrack.tempo ? `${selectedTrack.tempo} BPM` : "N/A"}</strong>
+                    <strong>{selectedTrack.tempo ? `${selectedTrack.tempo} BPM` : "Indisponibil"}</strong>
                   </div>
                   <div>
-                    <span>Created</span>
+                    <span>Rating mediu</span>
+                    <strong>{selectedTrack.avg_rating ? `${selectedTrack.avg_rating}/5` : "Indisponibil"}</strong>
+                  </div>
+                  <div>
+                    <span>Feedback</span>
+                    <strong>{selectedTrack.feedback_count || 0}</strong>
+                  </div>
+                  <div>
+                    <span>Creator</span>
+                    <strong>{selectedTrack.creator_email || "Indisponibil"}</strong>
+                  </div>
+                  <div>
+                    <span>Creata</span>
                     <strong>{new Date(selectedTrack.created_at).toLocaleDateString()}</strong>
                   </div>
                 </div>
@@ -548,7 +692,7 @@ const TrackLibrary = () => {
                   onClick={() => handleFeedbackClick(selectedTrack)}
                 >
                   <Icon name="heart" />
-                  Give Feedback
+                  Ofera feedback
                 </button>
               </div>
             </div>
@@ -570,3 +714,5 @@ const TrackLibrary = () => {
 };
 
 export default TrackLibrary;
+
+

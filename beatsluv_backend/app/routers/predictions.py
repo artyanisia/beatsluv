@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from app.auth import verify_token
-from app.services.popularity_model import predict_popularity
+from app.services.popularity_model import get_recommendations, predict_popularity
 
 
 router = APIRouter(prefix="/predictions", tags=["predictions"])
@@ -27,7 +27,15 @@ def predict_track_popularity(
     prediction = predict_popularity(request.model_dump())
     return {
         "predicted_rating": prediction.predicted_rating,
+        "success_score": round((prediction.predicted_rating / 5) * 100),
+        "confidence": prediction.confidence,
+        "explanation": prediction.explanation,
         "training_samples": prediction.training_samples,
         "model_name": prediction.model_name,
         "status": prediction.status,
     }
+
+
+@router.get("/recommendations")
+def get_music_recommendations(current_user: dict = Depends(verify_token)):
+    return get_recommendations()

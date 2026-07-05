@@ -47,6 +47,36 @@ const tooltipStyle = {
   color: "#ffffff",
 };
 
+function roText(value) {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const translations = {
+    "Analiza generarii muzicale": "Analiza generarii muzicale",
+    "Urmarire feedback": "Urmarire feedback",
+    "Performanta AI": "Performanta AI",
+    "Distributia tempo-ului": "Distributia tempo-ului",
+    "Distributia duratelor": "Distributia duratelor",
+    "Frecventa tonalitatilor": "Frecventa tonalitatilor",
+    "Temperatura AI vs rating": "Temperatura AI vs rating",
+    "Piese create in timp": "Piese create in timp",
+    "Evolutie lunara": "Evolutie lunara",
+    "Distributia ratingurilor": "Distributia ratingurilor",
+    "Rating mediu dupa gen": "Rating mediu dupa gen",
+    "Utilizatori activi": "Utilizatori activi",
+    "Interactiunea utilizatorilor": "Interactiunea utilizatorilor",
+    "Nu exista inca date despre performanta AI.": "Nu exista inca date despre performanta AI.",
+    "Nu exista date recente despre tendinte.": "Nu exista date recente despre tendinte.",
+    "Nu exista date lunare inca.": "Nu exista date lunare inca.",
+    "Nu exista ratinguri inca.": "Nu exista ratinguri inca.",
+    "Nu exista genuri evaluate inca.": "Nu exista genuri evaluate inca.",
+    "Nu exista date despre activitatea utilizatorilor.": "Nu exista date despre activitatea utilizatorilor.",
+  };
+
+  return translations[value] || value;
+}
+
 function DashboardIcon({ name }) {
   const icons = {
     users: (
@@ -90,16 +120,16 @@ function DashboardIcon({ name }) {
 }
 
 function EmptyState({ children }) {
-  return <p className="empty-state">{children}</p>;
+  return <p className="empty-state">{roText(children)}</p>;
 }
 
 function VisionStatCard({ label, value, icon, change, isPositive = true }) {
   return (
     <div className="stat-card metric-card">
       <div>
-        <p className="stat-card-title">{label}</p>
+        <p className="stat-card-title">{roText(label)}</p>
         <div className="stat-card-value">{value}</div>
-        <p className={`stat-card-change ${isPositive ? "positive" : "negative"}`}>{change}</p>
+        <p className={`stat-card-change ${isPositive ? "positive" : "negative"}`}>{roText(change)}</p>
       </div>
       <div className="stat-card-icon">
         <DashboardIcon name={icon} />
@@ -131,7 +161,7 @@ function ProgressRing({ value, max = 100, label, color = "blue", center }) {
         </svg>
         <div className={`progress-value ${color}`}>{center}</div>
       </div>
-      <div className="progress-label">{label}</div>
+      <div className="progress-label">{roText(label)}</div>
     </div>
   );
 }
@@ -139,7 +169,7 @@ function ProgressRing({ value, max = 100, label, color = "blue", center }) {
 function ChartCard({ title, children }) {
   return (
     <div className="chart-card">
-      <h3>{title}</h3>
+      <h3>{roText(title)}</h3>
       {children}
     </div>
   );
@@ -182,7 +212,7 @@ const Dashboard = () => {
     const response = await fetch(`${API_BASE_URL}${path}`, { headers });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(payload.detail || `Failed to load ${key}`);
+      throw new Error(payload.detail || `Nu s-au putut incarca datele pentru ${key}`);
     }
     return [key, payload];
   }
@@ -233,7 +263,7 @@ const Dashboard = () => {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload.detail || "Prediction failed");
+        throw new Error(payload.detail || "Predictia a esuat");
       }
       setPrediction(payload);
     } catch (err) {
@@ -249,7 +279,7 @@ const Dashboard = () => {
     return (
       <div className="loading-container">
         <div className="loading-spinner">
-          <div>Loading analytics...</div>
+          <div>Se incarca statisticile...</div>
           <div className="spinner" />
         </div>
       </div>
@@ -259,10 +289,10 @@ const Dashboard = () => {
   if (error) {
     return (
       <div className="error-container glass-card">
-        <h2>Error Loading Dashboard</h2>
+        <h2>Eroare la incarcarea dashboardului</h2>
         <p>{error}</p>
         <button type="button" onClick={loadAllAnalytics}>
-          Retry
+          Reincearca
         </button>
       </div>
     );
@@ -276,37 +306,37 @@ const Dashboard = () => {
       {overview && (
         <div className="stats-grid">
           <VisionStatCard
-            label="Today's Users"
+            label="Utilizatori Azi"
             value={overview.total_users.toLocaleString()}
             icon="users"
-            change="+3% since yesterday"
+            change="+3% fata de ieri"
           />
           <VisionStatCard
-            label="Total Sales"
-            value={`$${(overview.total_tracks * 103).toLocaleString()}`}
+            label="Venit estimat"
+            value={`${(overview.total_tracks * 103).toLocaleString()} RON`}
             icon="sales"
-            change="+5% than last week"
+            change="+5% fata de saptamana trecuta"
           />
           <VisionStatCard
-            label="Total Tracks"
+            label="Piese Totale"
             value={overview.total_tracks.toLocaleString()}
             icon="music"
-            change="+12% this month"
+            change="+12% in aceasta luna"
           />
           <VisionStatCard
-            label="Avg Rating"
+            label="Evaluare Medie"
             value={`${overview.avg_rating}/5`}
             icon="star"
-            change="+2% better quality"
+            change="+2% calitate imbunatatita"
           />
         </div>
       )}
 
       <div className="analytics-header">
         <div className="analytics-title">
-          <p className="eyebrow">Welcome back, {user?.email?.split('@')[0]?.charAt(0)?.toUpperCase() + user?.email?.split('@')[0]?.slice(1) || 'User'}</p>
-          <h1>Music Generation Analytics</h1>
-          <p>AI-powered insights from your music creation journey. Explore your data with interactive charts.</p>
+          <p className="eyebrow">Bine ai revenit, {user?.email?.split('@')[0]?.charAt(0)?.toUpperCase() + user?.email?.split('@')[0]?.slice(1) || 'Utilizator'}</p>
+          <h1>Analiza generarii muzicale</h1>
+          <p>Informatii bazate pe datele salvate in platforma. Exploreaza rezultatele prin grafice interactive.</p>
         </div>
       </div>
 
@@ -314,56 +344,56 @@ const Dashboard = () => {
         <div className="card compact-card horizontal-card">
           <div className="card-header">
             <div>
-              <h3 className="card-title">Feedback Tracking</h3>
-              <p className="card-subtitle">Live rating health</p>
+              <h3 className="card-title">Urmarire feedback</h3>
+              <p className="card-subtitle">Starea evaluarilor in timp real</p>
             </div>
-            <button type="button" className="icon-button" aria-label="More options">
+            <button type="button" className="icon-button" aria-label="Mai multe optiuni">
               <DashboardIcon name="more" />
             </button>
           </div>
           <div className="card-content">
             <div className="stacked-metrics">
               <div>
-                <span>Total Feedback</span>
-                <strong>{overview?.total_feedback || 0} reviews</strong>
+                <span>Feedback Total</span>
+                <strong>{overview?.total_feedback || 0} recenzii</strong>
               </div>
               <div>
-                <span>Average Score</span>
+                <span>Scor Mediu</span>
                 <strong>{overview?.avg_rating || 0}/5</strong>
               </div>
             </div>
-            <ProgressRing value={ratingPercent} label="Based on user ratings" center={`${ratingPercent}%`} />
+            <ProgressRing value={ratingPercent} label="Bazat pe evaluarile utilizatorilor" center={`${ratingPercent}%`} />
           </div>
         </div>
 
         <div className="card compact-card horizontal-card">
           <div className="card-header">
             <div>
-              <h3 className="card-title">AI Performance</h3>
-              <p className="card-subtitle">Model quality score</p>
+              <h3 className="card-title">Performanta AI</h3>
+              <p className="card-subtitle">Scorul calitatii modelului</p>
             </div>
           </div>
           <div className="card-content">
-            <ProgressRing value={93} label="Total Score" center="9.3" color="green" />
+            <ProgressRing value={93} label="Scor Total" center="9.3" color="green" />
           </div>
         </div>
       </div>
 
       <div className="analytics-controls">
         <div className="chart-selector">
-          <label htmlFor="chart-select">Select Chart View:</label>
+          <label htmlFor="chart-select">Selecteaza vizualizarea graficelor:</label>
           <select 
             id="chart-select"
             value={selectedChart} 
             onChange={(e) => setSelectedChart(e.target.value)}
             className="chart-dropdown"
           >
-            <option value="">Choose a chart view...</option>
-            <option value="genres">Genre Analysis</option>
-            <option value="ratings">Rating Analytics</option>
-            <option value="trends">Time Trends</option>
-            <option value="technical">Technical Data</option>
-            <option value="users">User Analytics</option>
+            <option value="">Alege o vizualizare grafica...</option>
+            <option value="genres">Analiza genuri</option>
+            <option value="ratings">Analiza evaluari</option>
+            <option value="trends">Tendinte temporale</option>
+            <option value="technical">Date Tehnice</option>
+            <option value="users">Analiza utilizatori</option>
           </select>
         </div>
       </div>
@@ -372,7 +402,7 @@ const Dashboard = () => {
       <div className="charts-grid">
         {selectedChart === "genres" && (
           <>
-            <ChartCard title="Tracks by Genre">
+            <ChartCard title="Piese dupa gen">
               {genres.length ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
@@ -385,30 +415,30 @@ const Dashboard = () => {
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <EmptyState>No genre data.</EmptyState>
+                <EmptyState>Nu exista date despre genuri.</EmptyState>
               )}
             </ChartCard>
 
-            <ChartCard title="Tracks by Mood">
+            <ChartCard title="Piese dupa stare">
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={moods}>
                   <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
                   <XAxis dataKey="mood" {...chartAxis} />
                   <YAxis {...chartAxis} />
                   <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="count" fill="#0075ff" name="Tracks" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="count" fill="#0075ff" name="Piese" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>
 
-            <ChartCard title="Average Tempo by Genre">
+            <ChartCard title="Tempo mediu dupa gen">
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={genres}>
                   <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
                   <XAxis dataKey="genre" {...chartAxis} />
                   <YAxis {...chartAxis} />
                   <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="avg_tempo" fill="#ffb547" name="Avg BPM" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="avg_tempo" fill="#ffb547" name="BPM Mediu" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>
@@ -417,43 +447,43 @@ const Dashboard = () => {
 
         {selectedChart === "technical" && (
           <>
-            <ChartCard title="Tempo Distribution">
+            <ChartCard title="Distributia tempo-ului">
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={tempos}>
                   <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
                   <XAxis dataKey="tempo_range" {...chartAxis} />
                   <YAxis {...chartAxis} />
                   <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="count" fill="#00bcff" name="Tracks" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="count" fill="#00bcff" name="Piese" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>
 
-            <ChartCard title="Duration Distribution">
+            <ChartCard title="Distributia duratelor">
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={durations}>
                   <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
                   <XAxis dataKey="duration_range" {...chartAxis} />
                   <YAxis {...chartAxis} />
                   <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="count" fill="#7551ff" name="Tracks" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="count" fill="#7551ff" name="Piese" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>
 
-            <ChartCard title="Key Frequency">
+            <ChartCard title="Frecventa tonalitatilor">
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={keys}>
                   <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
                   <XAxis dataKey="key_signature" {...chartAxis} />
                   <YAxis {...chartAxis} />
                   <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="count" fill="#01b574" name="Tracks" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="count" fill="#01b574" name="Piese" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>
 
-            <ChartCard title="AI Temperature vs Rating">
+            <ChartCard title="Temperatura AI vs rating">
               {aiPerformance.length ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={aiPerformance}>
@@ -462,11 +492,11 @@ const Dashboard = () => {
                     <YAxis domain={[0, 5]} {...chartAxis} />
                     <Tooltip contentStyle={tooltipStyle} />
                     <Legend />
-                    <Bar dataKey="avg_rating" fill="#e31a5f" name="Avg Rating" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="avg_rating" fill="#e31a5f" name="Rating mediu" radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <EmptyState>No AI performance data yet.</EmptyState>
+                <EmptyState>Nu exista inca date despre performanta AI.</EmptyState>
               )}
             </ChartCard>
           </>
@@ -474,7 +504,7 @@ const Dashboard = () => {
 
         {selectedChart === "trends" && (
           <>
-            <ChartCard title="Tracks Created Over Time">
+            <ChartCard title="Piese create in timp">
               {trends.daily_tracks.length ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={trends.daily_tracks}>
@@ -486,11 +516,11 @@ const Dashboard = () => {
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <EmptyState>No recent trend data.</EmptyState>
+                <EmptyState>Nu exista date recente despre tendinte.</EmptyState>
               )}
             </ChartCard>
 
-            <ChartCard title="Monthly Evolution">
+            <ChartCard title="Evolutie lunara">
               {monthly.length ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={monthly}>
@@ -499,12 +529,12 @@ const Dashboard = () => {
                     <YAxis {...chartAxis} />
                     <Tooltip contentStyle={tooltipStyle} />
                     <Legend />
-                    <Line type="monotone" dataKey="generated_count" stroke="#0075ff" strokeWidth={3} name="Generations" dot={false} />
+                    <Line type="monotone" dataKey="generated_count" stroke="#0075ff" strokeWidth={3} name="Generari" dot={false} />
                     <Line type="monotone" dataKey="feedback_count" stroke="#01b574" strokeWidth={3} name="Feedback" dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <EmptyState>No monthly data yet.</EmptyState>
+                <EmptyState>Nu exista date lunare inca.</EmptyState>
               )}
             </ChartCard>
           </>
@@ -512,7 +542,7 @@ const Dashboard = () => {
 
         {selectedChart === "ratings" && (
           <>
-            <ChartCard title="Rating Distribution">
+            <ChartCard title="Distributia ratingurilor">
               {ratings.rating_distribution.length ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={ratings.rating_distribution}>
@@ -524,11 +554,11 @@ const Dashboard = () => {
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <EmptyState>No feedback ratings yet.</EmptyState>
+                <EmptyState>Nu exista ratinguri inca.</EmptyState>
               )}
             </ChartCard>
 
-            <ChartCard title="Average Rating by Genre">
+            <ChartCard title="Rating mediu dupa gen">
               {ratings.genre_ratings.length ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={ratings.genre_ratings}>
@@ -536,11 +566,11 @@ const Dashboard = () => {
                     <XAxis dataKey="genre" {...chartAxis} />
                     <YAxis domain={[0, 5]} {...chartAxis} />
                     <Tooltip contentStyle={tooltipStyle} />
-                    <Bar dataKey="avg_rating" fill="#7551ff" name="Avg Rating" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="avg_rating" fill="#7551ff" name="Rating mediu" radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <EmptyState>No rated genres yet.</EmptyState>
+                <EmptyState>Nu exista genuri evaluate inca.</EmptyState>
               )}
             </ChartCard>
           </>
@@ -548,7 +578,7 @@ const Dashboard = () => {
 
         {selectedChart === "users" && (
           <>
-            <ChartCard title="Active Users">
+            <ChartCard title="Utilizatori activi">
               {users.active_users.length ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={users.active_users.slice(0, 10)}>
@@ -556,26 +586,26 @@ const Dashboard = () => {
                     <XAxis dataKey="user_id" {...chartAxis} />
                     <YAxis {...chartAxis} />
                     <Tooltip contentStyle={tooltipStyle} />
-                    <Bar dataKey="tracks_created" fill="#38bdf8" name="Tracks Created" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="tracks_created" fill="#38bdf8" name="Piese create" radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <EmptyState>No user activity data yet.</EmptyState>
+                <EmptyState>Nu exista date despre activitatea utilizatorilor.</EmptyState>
               )}
             </ChartCard>
 
-            <ChartCard title="User Engagement">
+            <ChartCard title="Interactiunea utilizatorilor">
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={[
-                  { metric: "Avg Listens", value: users.engagement.avg_listens || 0 },
-                  { metric: "Like Rate", value: users.engagement.like_percentage || 0 },
-                  { metric: "Download Rate", value: users.engagement.download_percentage || 0 },
+                  { metric: "Ascultari medii", value: users.engagement.avg_ascultari || 0 },
+                  { metric: "Rata aprecieri", value: users.engagement.like_percentage || 0 },
+                  { metric: "Rata descarcari", value: users.engagement.download_percentage || 0 },
                 ]}>
                   <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
                   <XAxis dataKey="metric" {...chartAxis} />
                   <YAxis {...chartAxis} />
                   <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="value" fill="#7551ff" name="Value" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="value" fill="#7551ff" name="Valoare" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>
@@ -586,7 +616,7 @@ const Dashboard = () => {
 
       <div className="dashboard-footer">
         <button type="button" onClick={loadAllAnalytics} disabled={loading}>
-          {loading ? "Refreshing..." : "Refresh Data"}
+          {loading ? "Se actualizeaza..." : "Actualizeaza datele"}
         </button>
       </div>
     </div>
@@ -594,3 +624,4 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+

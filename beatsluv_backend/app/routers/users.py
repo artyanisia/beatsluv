@@ -16,6 +16,37 @@ def scalar(cur, query, params=None, default=0):
     return value if value is not None else default
 
 
+def ensure_profile_support_tables(conn):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            ALTER TABLE feedback
+            ADD COLUMN IF NOT EXISTS melody_rating INT,
+            ADD COLUMN IF NOT EXISTS originality_rating INT,
+            ADD COLUMN IF NOT EXISTS emotional_impact_rating INT,
+            ADD COLUMN IF NOT EXISTS commercial_potential_rating INT,
+            ADD COLUMN IF NOT EXISTS production_quality_rating INT;
+
+            CREATE TABLE IF NOT EXISTS prompt_versions (
+                id SERIAL PRIMARY KEY,
+                user_id INT NOT NULL REFERENCES users(id),
+                track_id INT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+                parent_track_id INT REFERENCES tracks(id) ON DELETE SET NULL,
+                version_number INT NOT NULL,
+                prompt TEXT NOT NULL,
+                genre VARCHAR(100),
+                mood VARCHAR(100),
+                tempo INT,
+                duration_seconds INT,
+                ai_temperature NUMERIC(3, 2),
+                key_signature VARCHAR(20),
+                predicted_rating NUMERIC(4, 2),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+
+
 @router.get("/me/stats")
 def get_my_stats(current_user: dict = Depends(verify_token)):
     user_id = current_user["id"]
@@ -120,6 +151,90 @@ def get_my_stats(current_user: dict = Depends(verify_token)):
         "member_since": member_since.isoformat() if member_since else None,
         "favorite_genre": favorite_genre,
         "favorite_mood": favorite_mood,
+    }
+
+
+@router.get("/me/creator-analytics")
+def get_my_creator_analytics(current_user: dict = Depends(verify_token)):
+    user_id = current_user["id"]
+    with get_connection() as conn:
+        ensure_profile_support_tables(conn)
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    t.id,
+                    t.title,
+                    t.genre,
+                    t.mood,
+                    COUNT(f.id) AS feedback_count,
+                    ROUND(AVG(f.rating)::numeric, 2) AS avg_rating,
+                    COALESCE(SUM(f.listen_count), 0) AS listens,
+                    COUNT(*) FILTER (WHERE f.liked = TRUE) AS likes
+                FROM tracks t
+                LEFT JOIN feedback f ON t.id = f.track_id
+                WHERE t.user_id = %s
+                GROUP BY t.id
+                ORDER BY avg_rating DESC NULLS LAST, feedback_count DESC, t.created_at DESC
+                LIMIT 5;
+                """,
+                (user_id,),
+            )
+            top_tracks = cur.fetchall()
+
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(NULLIF(TRIM(t.genre), ''), 'Unknown') AS genre,
+                    COUNT(DISTINCT t.id) AS track_count,
+                    COUNT(f.id) AS feedback_count,
+                    ROUND(AVG(f.rating)::numeric, 2) AS avg_rating
+                FROM tracks t
+                LEFT JOIN feedback f ON t.id = f.track_id
+                WHERE t.user_id = %s
+                GROUP BY COALESCE(NULLIF(TRIM(t.genre), ''), 'Unknown')
+                ORDER BY avg_rating DESC NULLS LAST, track_count DESC;
+                """,
+                (user_id,),
+            )
+            genre_performance = cur.fetchall()
+
+            cur.execute(
+                """
+                SELECT COUNT(*) AS version_count
+                FROM prompt_versions
+                WHERE user_id = %s;
+                """,
+                (user_id,),
+            )
+            version_count = cur.fetchone()["version_count"]
+
+            success_rate = scalar(
+                cur,
+                """
+                SELECT ROUND(
+                    100.0 * COUNT(DISTINCT t.id) FILTER (WHERE rated.avg_rating >= 4)
+                    / NULLIF(COUNT(DISTINCT t.id), 0),
+                    1
+                )
+                FROM tracks t
+                LEFT JOIN (
+                    SELECT track_id, AVG(rating) AS avg_rating
+                    FROM feedback
+                    WHERE rating IS NOT NULL
+                    GROUP BY track_id
+                ) rated ON rated.track_id = t.id
+                WHERE t.user_id = %s;
+                """,
+                (user_id,),
+                0,
+            )
+
+    return {
+        "top_tracks": top_tracks,
+        "genre_performance": genre_performance,
+        "prompt_versions": version_count,
+        "success_rate": float(success_rate or 0),
     }
 
 

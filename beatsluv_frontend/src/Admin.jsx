@@ -2,6 +2,12 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "./AuthContext";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
+const TAB_LABELS = {
+  tracks: "Piese",
+  playlists: "Playlisturi",
+  users: "Utilizatori",
+  feedback: "Feedback",
+};
 
 function AdminStat({ label, value }) {
   return (
@@ -16,10 +22,11 @@ function AdminPage() {
   const { user, getAuthHeaders } = useAuth();
   const [activeTab, setActiveTab] = useState("tracks");
   const [overview, setOverview] = useState(null);
-  const [users, setUsers] = useState([]);
-  const [tracks, setTracks] = useState([]);
+  const [users, setUtilizatori] = useState([]);
+  const [tracks, setPiese] = useState([]);
+  const [playlists, setPlaylists] = useState([]);
   const [feedback, setFeedback] = useState([]);
-  const [search, setSearch] = useState("");
+  const [search, setCauta] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -28,17 +35,22 @@ function AdminPage() {
   }, []);
 
   async function adminFetch(path, options = {}) {
+    const headers = {
+      ...getAuthHeaders(),
+      ...(options.headers || {}),
+    };
+
+    if (options.body) {
+      headers["Content-Type"] = "application/json";
+    }
+
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...getAuthHeaders(),
-        ...(options.headers || {}),
-      },
+      headers,
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(payload.detail || "Admin request failed");
+      throw new Error(payload.detail || "Cererea de administrare a esuat");
     }
     return payload;
   }
@@ -47,30 +59,36 @@ function AdminPage() {
     setLoading(true);
     setMessage("");
     try {
-      const [overviewData, usersData, tracksData, feedbackData] = await Promise.all([
+      const [overviewData, usersData, tracksData, playlistData, feedbackData] = await Promise.all([
         adminFetch("/admin/overview"),
         adminFetch("/admin/users"),
         adminFetch(`/admin/tracks?limit=120&search=${encodeURIComponent(search)}`),
+        adminFetch(`/admin/playlists?limit=120&search=${encodeURIComponent(search)}`),
         adminFetch("/admin/feedback?limit=120"),
       ]);
       setOverview(overviewData);
-      setUsers(usersData);
-      setTracks(tracksData);
+      setUtilizatori(usersData);
+      setPiese(tracksData);
+      setPlaylists(playlistData);
       setFeedback(feedbackData);
     } catch (error) {
-      setMessage(error.message);
+      setMessage(
+        error.message === "Failed to fetch"
+          ? `Backendul nu poate fi accesat la ${API_BASE_URL}. Verifica daca serverul API ruleaza.`
+          : error.message,
+      );
     } finally {
       setLoading(false);
     }
   }
 
-  async function updateUserRole(userId, role) {
+  async function updateUserRol(userId, role) {
     try {
       await adminFetch(`/admin/users/${userId}/role`, {
         method: "PATCH",
         body: JSON.stringify({ role }),
       });
-      setMessage(`Updated user #${userId} role.`);
+      setMessage(`Rolul utilizatorului #${userId} a fost actualizat.`);
       await loadAdminData();
     } catch (error) {
       setMessage(error.message);
@@ -83,7 +101,7 @@ function AdminPage() {
         method: "PATCH",
         body: JSON.stringify(updates),
       });
-      setMessage(`Updated track #${trackId}.`);
+      setMessage(`Piesa #${trackId} a fost actualizata.`);
       await loadAdminData();
     } catch (error) {
       setMessage(error.message);
@@ -91,12 +109,38 @@ function AdminPage() {
   }
 
   async function deleteTrack(trackId) {
-    if (!window.confirm(`Delete track #${trackId} and its feedback?`)) {
+    if (!window.confirm(`Stergi piesa #${trackId} si feedbackul asociat?`)) {
       return;
     }
     try {
       await adminFetch(`/admin/tracks/${trackId}`, { method: "DELETE" });
-      setMessage(`Deleted track #${trackId}.`);
+      setMessage(`Piesa #${trackId} a fost stearsa.`);
+      await loadAdminData();
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function updatePlaylist(playlistId, updates) {
+    try {
+      await adminFetch(`/admin/playlists/${playlistId}`, {
+        method: "PATCH",
+        body: JSON.stringify(updates),
+      });
+      setMessage(`Playlistul #${playlistId} a fost actualizat.`);
+      await loadAdminData();
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  async function deletePlaylist(playlistId) {
+    if (!window.confirm(`Stergi playlistul #${playlistId}?`)) {
+      return;
+    }
+    try {
+      await adminFetch(`/admin/playlists/${playlistId}`, { method: "DELETE" });
+      setMessage(`Playlistul #${playlistId} a fost sters.`);
       await loadAdminData();
     } catch (error) {
       setMessage(error.message);
@@ -104,12 +148,12 @@ function AdminPage() {
   }
 
   async function deleteFeedback(feedbackId) {
-    if (!window.confirm(`Delete feedback #${feedbackId}?`)) {
+    if (!window.confirm(`Stergi feedbackul #${feedbackId}?`)) {
       return;
     }
     try {
       await adminFetch(`/admin/feedback/${feedbackId}`, { method: "DELETE" });
-      setMessage(`Deleted feedback #${feedbackId}.`);
+      setMessage(`Feedbackul #${feedbackId} a fost sters.`);
       await loadAdminData();
     } catch (error) {
       setMessage(error.message);
@@ -119,8 +163,8 @@ function AdminPage() {
   if (user?.role !== "ADMIN" || user?.email !== "admin@gmail.com") {
     return (
       <section className="panel">
-        <h2>Admin</h2>
-        <p className="empty-state">Admin access required.</p>
+        <h2>Administrare</h2>
+        <p className="empty-state">Ai nevoie de acces de administrator.</p>
       </section>
     );
   }
@@ -131,57 +175,62 @@ function AdminPage() {
 
       {overview && (
         <div className="stats-grid">
-          <AdminStat label="Users" value={overview.users} />
-          <AdminStat label="Admins" value={overview.admins} />
-          <AdminStat label="Tracks" value={overview.tracks} />
-          <AdminStat label="Playable" value={overview.playable_tracks} />
+          <AdminStat label="Utilizatori" value={overview.users} />
+          <AdminStat label="Administratori" value={overview.admins} />
+          <AdminStat label="Piese" value={overview.tracks} />
+          <AdminStat label="Cu audio" value={overview.playable_tracks} />
+          <AdminStat label="Piese publice" value={overview.public_tracks} />
+          <AdminStat label="Playlisturi" value={overview.playlists} />
+          <AdminStat label="Playlisturi publice" value={overview.public_playlists} />
           <AdminStat label="Feedback" value={overview.feedback} />
-          <AdminStat label="Requests" value={overview.generation_requests} />
+          <AdminStat label="Cereri" value={overview.generation_requests} />
+          <AdminStat label="Versiuni prompt" value={overview.prompt_versions} />
         </div>
       )}
 
       <div className="admin-toolbar">
         <div className="nav-actions">
-          {["tracks", "users", "feedback"].map((tab) => (
+          {["tracks", "playlists", "users", "feedback"].map((tab) => (
             <button
               key={tab}
               type="button"
               onClick={() => setActiveTab(tab)}
               className={activeTab === tab ? "nav-button active" : "nav-button"}
             >
-              {tab[0].toUpperCase() + tab.slice(1)}
+              {TAB_LABELS[tab]}
             </button>
           ))}
         </div>
         <button type="button" onClick={loadAdminData} disabled={loading}>
-          {loading ? "Loading..." : "Refresh Admin Data"}
+          {loading ? "Se incarca..." : "Actualizeaza datele"}
         </button>
       </div>
 
       {activeTab === "tracks" && (
         <section className="panel admin-section">
           <div className="panel-heading">
-            <h2>Track Management</h2>
-            <span>Edit status and metadata</span>
+            <h2>Gestionare piese</h2>
+            <span>Editeaza statusul si metadatele</span>
           </div>
           <div className="admin-search">
             <input
               value={search}
-              placeholder="Search by title, genre, mood"
-              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Cauta dupa titlu, gen sau stare"
+              onChange={(event) => setCauta(event.target.value)}
             />
-            <button type="button" onClick={loadAdminData}>Search</button>
+            <button type="button" onClick={loadAdminData}>Cauta</button>
           </div>
           <div className="admin-table">
             <div className="admin-row admin-row-header">
               <span>ID</span>
-              <span>Title</span>
+              <span>Titlu</span>
               <span>Status</span>
-              <span>Genre</span>
-              <span>Mood</span>
+              <span>Gen</span>
+              <span>Stare</span>
               <span>Tempo</span>
+              <span>Public</span>
               <span>Rating</span>
-              <span>Actions</span>
+              <span>Actiuni</span>
             </div>
             {tracks.map((track) => (
               <div className="admin-row" key={track.id}>
@@ -191,10 +240,10 @@ function AdminPage() {
                   value={track.status || "COMPLETED"}
                   onChange={(event) => updateTrack(track.id, { status: event.target.value })}
                 >
-                  <option value="COMPLETED">COMPLETED</option>
-                  <option value="PROCESSING">PROCESSING</option>
-                  <option value="FAILED">FAILED</option>
-                  <option value="HIDDEN">HIDDEN</option>
+                  <option value="COMPLETED">Finalizata</option>
+                  <option value="PROCESSING">In procesare</option>
+                  <option value="FAILED">Esuata</option>
+                  <option value="HIDDEN">Ascunsa</option>
                 </select>
                 <input
                   defaultValue={track.genre || ""}
@@ -209,9 +258,17 @@ function AdminPage() {
                   defaultValue={track.tempo || ""}
                   onBlur={(event) => updateTrack(track.id, { tempo: event.target.value ? Number(event.target.value) : null })}
                 />
-                <span>{track.avg_rating || "N/A"}</span>
+                <label className="toggle-switch" aria-label={`Schimba vizibilitatea publica pentru ${track.title}`}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(track.is_public)}
+                    onChange={(event) => updateTrack(track.id, { is_public: event.target.checked })}
+                  />
+                  <span className="toggle-slider" />
+                </label>
+                <span>{track.avg_rating || "Indisponibil"}</span>
                 <button type="button" className="danger-button" onClick={() => deleteTrack(track.id)}>
-                  Delete
+                  Sterge
                 </button>
               </div>
             ))}
@@ -222,15 +279,15 @@ function AdminPage() {
       {activeTab === "users" && (
         <section className="panel admin-section">
           <div className="panel-heading">
-            <h2>User Management</h2>
-            <span>Manage roles</span>
+            <h2>Gestionare utilizatori</h2>
+            <span>Administreaza rolurile</span>
           </div>
           <div className="admin-table users-table">
             <div className="admin-row admin-row-header">
               <span>ID</span>
               <span>Email</span>
-              <span>Role</span>
-              <span>Tracks</span>
+              <span>Rol</span>
+              <span>Piese</span>
               <span>Feedback</span>
             </div>
             {users.map((account) => (
@@ -239,10 +296,10 @@ function AdminPage() {
                 <span>{account.email}</span>
                 <select
                   value={account.role}
-                  onChange={(event) => updateUserRole(account.id, event.target.value)}
+                  onChange={(event) => updateUserRol(account.id, event.target.value)}
                 >
-                  <option value="USER">USER</option>
-                  <option value="ADMIN">ADMIN</option>
+                  <option value="USER">Utilizator</option>
+                  <option value="ADMIN">Administrator</option>
                 </select>
                 <span>{account.tracks_count}</span>
                 <span>{account.feedback_count}</span>
@@ -252,38 +309,95 @@ function AdminPage() {
         </section>
       )}
 
-      {activeTab === "feedback" && (
+      {activeTab === "playlists" && (
         <section className="panel admin-section">
           <div className="panel-heading">
-            <h2>Feedback Moderation</h2>
-            <span>Review ratings and comments</span>
+            <h2>Gestionare playlisturi</h2>
+            <span>Administreaza vizibilitatea si colectiile</span>
           </div>
-          <div className="admin-table feedback-table">
+          <div className="admin-search">
+            <input
+              value={search}
+              placeholder="Cauta dupa nume, descriere sau proprietar"
+              onChange={(event) => setCauta(event.target.value)}
+            />
+            <button type="button" onClick={loadAdminData}>Cauta</button>
+          </div>
+          <div className="admin-table playlist-admin-table">
             <div className="admin-row admin-row-header">
               <span>ID</span>
-              <span>Track</span>
-              <span>User</span>
+              <span>Nume</span>
+              <span>Proprietar</span>
+              <span>Piese</span>
+              <span>Vizibilitate</span>
               <span>Rating</span>
-              <span>Comment</span>
-              <span>Actions</span>
+              <span>Actiuni</span>
             </div>
-            {feedback.map((item) => (
-              <div className="admin-row" key={item.id}>
-                <span>#{item.id}</span>
-                <span>{item.track_title || `Track #${item.track_id}`}</span>
-                <span>{item.user_email || `User #${item.user_id}`}</span>
-                <span>{item.rating || "N/A"}</span>
-                <span>{item.comment || "No comment"}</span>
-                <button type="button" className="danger-button" onClick={() => deleteFeedback(item.id)}>
-                  Delete
+            {playlists.map((playlist) => (
+              <div className="admin-row" key={playlist.id}>
+                <span>#{playlist.id}</span>
+                <input
+                  defaultValue={playlist.name || ""}
+                  onBlur={(event) => updatePlaylist(playlist.id, { name: event.target.value })}
+                />
+                <span>{playlist.user_email || `Utilizator #${playlist.user_id}`}</span>
+                <span>{playlist.track_count}</span>
+                <label className="toggle-switch" aria-label={`Schimba vizibilitatea publica pentru ${playlist.name}`}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(playlist.is_public)}
+                    onChange={(event) => updatePlaylist(playlist.id, { is_public: event.target.checked })}
+                  />
+                  <span className="toggle-slider" />
+                </label>
+                <span>{playlist.avg_rating || "Indisponibil"}</span>
+                <button type="button" className="danger-button" onClick={() => deletePlaylist(playlist.id)}>
+                  Sterge
                 </button>
               </div>
             ))}
           </div>
         </section>
       )}
+
+      {activeTab === "feedback" && (
+        <section className="panel admin-section">
+          <div className="panel-heading">
+            <h2>Moderare feedback</h2>
+            <span>Verifica ratingurile si comentariile</span>
+          </div>
+          <div className="admin-table feedback-table">
+            <div className="admin-row admin-row-header">
+              <span>ID</span>
+              <span>Piesa</span>
+              <span>Utilizator</span>
+              <span>Rating</span>
+              <span>Criterii</span>
+              <span>Comentariu</span>
+              <span>Actiuni</span>
+            </div>
+            {feedback.map((item) => (
+              <div className="admin-row" key={item.id}>
+                <span>#{item.id}</span>
+                <span>{item.track_title || `Piesa #${item.track_id}`}</span>
+                <span>{item.user_email || `Utilizator #${item.user_id}`}</span>
+                <span>{item.rating || "Indisponibil"}</span>
+                <span>
+                  M {item.melody_rating || "-"} / O {item.originality_rating || "-"} / E {item.emotional_impact_rating || "-"} / C {item.commercial_potential_rating || "-"} / P {item.production_quality_rating || "-"}
+                </span>
+                <span>{item.comment || "Fara comentariu"}</span>
+                <button type="button" className="danger-button" onClick={() => deleteFeedback(item.id)}>
+                  Sterge
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
     </section>
   );
 }
 
 export default AdminPage;
+

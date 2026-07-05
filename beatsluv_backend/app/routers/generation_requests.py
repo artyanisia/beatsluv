@@ -30,6 +30,46 @@ def ensure_track_analytics_columns(conn):
         )
 
 
+def ensure_prompt_versions_table(conn):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS prompt_versions (
+                id SERIAL PRIMARY KEY,
+                user_id INT NOT NULL REFERENCES users(id),
+                track_id INT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+                parent_track_id INT REFERENCES tracks(id) ON DELETE SET NULL,
+                version_number INT NOT NULL,
+                prompt TEXT NOT NULL,
+                genre VARCHAR(100),
+                mood VARCHAR(100),
+                tempo INT,
+                duration_seconds INT,
+                ai_temperature NUMERIC(3, 2),
+                key_signature VARCHAR(20),
+                predicted_rating NUMERIC(4, 2),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+
+
+def next_version_number(cur, parent_track_id):
+    if not parent_track_id:
+        return 1
+
+    cur.execute(
+        """
+        SELECT COALESCE(MAX(version_number), 1) + 1 AS next_version
+        FROM prompt_versions
+        WHERE track_id = %s OR parent_track_id = %s;
+        """,
+        (parent_track_id, parent_track_id),
+    )
+    row = cur.fetchone()
+    return row["next_version"] if row else 2
+
+
 class GenerationRequestCreate(BaseModel):
     prompt: str
     genre: Optional[str] = None
@@ -39,6 +79,8 @@ class GenerationRequestCreate(BaseModel):
     key_signature: Optional[str] = None
     duration_seconds: int = 30
     is_public: bool = True
+    parent_track_id: Optional[int] = None
+    predicted_rating: Optional[float] = None
 
 
 @router.post("")
@@ -46,13 +88,11 @@ def create_generation_request(
     request: GenerationRequestCreate, 
     current_user: dict = Depends(verify_token)
 ):
-    """
-    Create a generation request, generate music, then save a track.
-    """
     generator = MusicGeneratorService()
 
     with get_connection() as conn:
         ensure_track_analytics_columns(conn)
+        ensure_prompt_versions_table(conn)
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -146,6 +186,40 @@ def create_generation_request(
                 ),
             )
             track = cur.fetchone()
+
+            cur.execute(
+                """
+                INSERT INTO prompt_versions (
+                    user_id,
+                    track_id,
+                    parent_track_id,
+                    version_number,
+                    prompt,
+                    genre,
+                    mood,
+                    tempo,
+                    duration_seconds,
+                    ai_temperature,
+                    key_signature,
+                    predicted_rating
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+                """,
+                (
+                    current_user["id"],
+                    track["id"],
+                    request.parent_track_id,
+                    next_version_number(cur, request.parent_track_id),
+                    request.prompt,
+                    request.genre,
+                    request.mood,
+                    request.tempo,
+                    request.duration_seconds,
+                    request.ai_temperature,
+                    request.key_signature,
+                    request.predicted_rating,
+                ),
+            )
 
             cur.execute(
                 """

@@ -8,6 +8,7 @@ import AdminPage from "./Admin";
 import TrackLibrary from "./TrackLibrary";
 import Generation from "./Generation";
 import UserProfile from "./UserProfile";
+import Playlists from "./Playlists";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
 
@@ -32,6 +33,16 @@ function Icon({ name }) {
       <>
         <path d="M4 19.5V8a1 1 0 0 1 1-1h15a1 1 0 0 1 1 1v11.5" />
         <path d="M4 8V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2" />
+      </>
+    ),
+    playlist: (
+      <>
+        <path d="M4 6h11" />
+        <path d="M4 12h9" />
+        <path d="M4 18h7" />
+        <path d="M17 14v6" />
+        <circle cx="15" cy="20" r="2" />
+        <path d="M17 14l4-1v5" />
       </>
     ),
     admin: (
@@ -98,7 +109,7 @@ function AppContent() {
     return (
       <div className="loading-container">
         <div className="loading-spinner">
-          <div>Loading BeatsLuv...</div>
+          <div>Se incarca BeatsLuv...</div>
           <div className="spinner" />
         </div>
       </div>
@@ -110,18 +121,20 @@ function AppContent() {
   }
 
 
-  const getPageTitle = () => {
+  const getPageTitlu = () => {
     switch (currentView) {
       case "dashboard":
-        return "Dashboard";
+        return "Tablou de Bord";
       case "generation":
-        return "Generate Music";
+        return "Generare muzica";
       case "library":
-        return "Track Library";
+        return "Biblioteca de Melodii";
+      case "playlists":
+        return "Playlisturi";
       case "profile":
-        return "User Profile";
+        return "Profil Utilizator";
       case "admin":
-        return "Admin Management";
+        return "Administrare";
       default:
         return "BeatsLuv";
     }
@@ -145,7 +158,7 @@ function AppContent() {
             <span className="nav-icon-box">
               <Icon name="dashboard" />
             </span>
-            <span className="nav-text">Dashboard</span>
+            <span className="nav-text">Tablou de Bord</span>
           </button>
           <button
             type="button"
@@ -155,7 +168,7 @@ function AppContent() {
             <span className="nav-icon-box">
               <Icon name="music" />
             </span>
-            <span className="nav-text">Generate Music</span>
+            <span className="nav-text">Generare muzica</span>
           </button>
           <button
             type="button"
@@ -165,7 +178,17 @@ function AppContent() {
             <span className="nav-icon-box">
               <Icon name="library" />
             </span>
-            <span className="nav-text">Track Library</span>
+            <span className="nav-text">Biblioteca Melodii</span>
+          </button>
+          <button
+            type="button"
+            className={`nav-item ${currentView === "playlists" ? "active" : ""}`}
+            onClick={() => setCurrentView("playlists")}
+          >
+            <span className="nav-icon-box">
+              <Icon name="playlist" />
+            </span>
+            <span className="nav-text">Playlisturi</span>
           </button>
           <button
             type="button"
@@ -175,7 +198,7 @@ function AppContent() {
             <span className="nav-icon-box">
               <Icon name="user" />
             </span>
-            <span className="nav-text">Profile</span>
+            <span className="nav-text">Profil</span>
           </button>
           {isAdmin && (
             <button
@@ -186,16 +209,16 @@ function AppContent() {
               <span className="nav-icon-box">
                 <Icon name="admin" />
               </span>
-              <span className="nav-text">Admin</span>
+              <span className="nav-text">Administrare</span>
             </button>
           )}
 
-          <div className="nav-section-title">Account</div>
+          <div className="nav-section-title">Cont</div>
           <button type="button" className="nav-item logout-item" onClick={logout}>
             <span className="nav-icon-box">
               <Icon name="logout" />
             </span>
-            <span className="nav-text">Sign Out</span>
+            <span className="nav-text">Deconectare</span>
           </button>
         </nav>
       </aside>
@@ -204,9 +227,9 @@ function AppContent() {
         <header className="main-header">
           <div className="header-left">
             <div className="breadcrumb">
-              <span>Pages</span> / {getPageTitle()}
+              <span>Pagini</span> / {getPageTitlu()}
             </div>
-            <h1 className="header-title">{getPageTitle()}</h1>
+            <h1 className="header-title">{getPageTitlu()}</h1>
           </div>
 
           <div className="header-right">
@@ -221,6 +244,7 @@ function AppContent() {
           {currentView === "dashboard" && <Dashboard />}
           {currentView === "generation" && <Generation />}
           {currentView === "library" && <TrackLibrary />}
+          {currentView === "playlists" && <Playlists />}
           {currentView === "profile" && <UserProfile />}
           {currentView === "admin" && <AdminPage />}
         </main>
@@ -240,12 +264,13 @@ function App() {
 try {
   const rootElement = document.getElementById("root");
   if (!rootElement) {
-    throw new Error("Root element not found");
+    throw new Error("Elementul root nu a fost gasit");
   }
 
   const root = createRoot(rootElement);
   root.render(<App />);
 } catch (error) {
-  console.error("Failed to render app:", error);
-  document.body.innerHTML = `<div style="padding: 20px; color: red;"><h2>Error loading BeatsLuv</h2><p>${error.message}</p><p>Check browser console for more details</p></div>`;
+  console.error("Aplicatia nu s-a putut afisa:", error);
+  document.body.innerHTML = `<div style="padding: 20px; color: red;"><h2>Eroare la incarcarea BeatsLuv</h2><p>${error.message}</p><p>Verifica consola browserului pentru mai multe detalii</p></div>`;
 }
+

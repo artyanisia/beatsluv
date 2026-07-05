@@ -37,11 +37,11 @@ const AuthForm = () => {
         if (!cancelled) {
           setEmailExists(exists);
         }
-      } catch (err) {
-        if (!cancelled) {
-          setEmailExists(null);
-          setError(err.message || 'Could not check account.');
-        }
+        } catch (err) {
+          if (!cancelled) {
+            setEmailExists(null);
+            setError(err.message || 'Nu s-a putut verifica contul.');
+          }
       } finally {
         if (!cancelled) {
           setCheckingEmail(false);
@@ -61,11 +61,11 @@ const AuthForm = () => {
     }
 
     if (isLogin && !emailExists) {
-      return 'No account exists for this email. Please create an account first.';
+      return 'Nu exista un cont pentru acest email. Te rugam sa creezi mai intai un cont.';
     }
 
     if (!isLogin && emailExists) {
-      return 'This email already has an account. Please sign in.';
+      return 'Acest email are deja un cont. Te rugam sa te conectezi.';
     }
 
     return '';
@@ -82,25 +82,25 @@ const AuthForm = () => {
     setError('');
 
     if (isLogin && emailExists === false) {
-      setError('No account exists for this email. Please create an account first.');
+      setError('Nu exista un cont pentru acest email. Te rugam sa creezi mai intai un cont.');
       return;
     }
 
     if (!isLogin && emailExists === true) {
-      setError('This email already has an account. Please sign in.');
+      setError('Acest email are deja un cont. Te rugam sa te conectezi.');
       return;
     }
 
     setLoading(true);
 
     if (!isLogin && password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError('Parolele nu se potrivesc');
       setLoading(false);
       return;
     }
 
     if (password.length < 6) {
-      setError('Password must be at least 6 characters long');
+      setError('Parola trebuie sa aiba cel putin 6 caractere');
       setLoading(false);
       return;
     }
@@ -125,7 +125,7 @@ const AuthForm = () => {
       }
     } catch (err) {
       console.error('Authentication error:', err);
-      setError('An unexpected error occurred');
+      setError('A aparut o eroare neasteptata');
     } finally {
       setLoading(false);
     }
@@ -147,11 +147,11 @@ const AuthForm = () => {
         <div className="glass-card vision-auth-card">
           <div className="auth-header">
             <h1 className="vision-brand">BeatsLuv</h1>
-            <h2 className="vision-welcome">{isLogin ? 'Welcome Back' : 'Create Account'}</h2>
+            <h2 className="vision-welcome">{isLogin ? 'Bine ai revenit' : 'Creeaza cont'}</h2>
             <p className="vision-subtitle">
               {isLogin 
-                ? 'Enter your email and password to sign in' 
-                : 'Join the future of AI music generation'
+                ? 'Introdu emailul si parola pentru a te conecta' 
+                : 'Alatura-te viitorului generarii muzicale cu AI'
               }
             </p>
           </div>
@@ -167,22 +167,22 @@ const AuthForm = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                placeholder="Your email address"
+                placeholder="Adresa ta de email"
                 className="vision-input"
               />
-              {checkingEmail && <span className="field-hint">Checking account...</span>}
+              {checkingEmail && <span className="field-hint">Se verifica contul...</span>}
               {accountMessage && <span className="field-warning">{accountMessage}</span>}
             </div>
 
             <div className="form-group">
-              <label htmlFor="password">Password</label>
+              <label htmlFor="password">Parola</label>
               <input
                 type="password"
                 id="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                placeholder="Your password"
+                placeholder="Parola ta"
                 minLength="6"
                 className="vision-input"
               />
@@ -190,14 +190,14 @@ const AuthForm = () => {
 
             {!isLogin && (
               <div className="form-group">
-                <label htmlFor="confirmPassword">Confirm Password</label>
+                <label htmlFor="confirmPassword">Confirma parola</label>
                 <input
                   type="password"
                   id="confirmPassword"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
-                  placeholder="Confirm your password"
+                  placeholder="Confirma parola"
                   minLength="6"
                   className="vision-input"
                 />
@@ -205,19 +205,19 @@ const AuthForm = () => {
             )}
 
             <button type="submit" disabled={shouldDisableSubmit} className="vision-btn-primary">
-              {loading ? 'PLEASE WAIT...' : (isLogin ? 'SIGN IN' : 'SIGN UP')}
+              {loading ? 'TE RUGAM ASTEAPTA...' : (isLogin ? 'CONECTARE' : 'INREGISTRARE')}
             </button>
           </form>
 
           <div className="auth-toggle">
             <p>
-              {isLogin ? "Don't have an account? " : 'Already have an account? '}
+              {isLogin ? "Nu ai un cont? " : 'Ai deja un cont? '}
               <button 
                 type="button" 
                 onClick={toggleMode} 
                 className="toggle-link"
               >
-                {isLogin ? 'Sign up' : 'Sign in'}
+                {isLogin ? 'Inregistreaza-te' : 'Conecteaza-te'}
               </button>
             </p>
           </div>
@@ -228,3 +228,4 @@ const AuthForm = () => {
 };
 
 export default AuthForm;
+

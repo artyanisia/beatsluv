@@ -1,27 +1,5 @@
 # BeatsLuv Backend
 
-## Start Everything
-
-From the main `BeatsLuv` project folder, run:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\start_project.ps1
-```
-
-This starts or reuses all required local services:
-
-- ACE-Step: `http://127.0.0.1:7860`
-- Backend: `http://127.0.0.1:8001`
-- Frontend: `http://127.0.0.1:5173`
-
-ACE-Step can take a few minutes to become ready. Wait until `http://127.0.0.1:7860/health` responds before generating music.
-
-To start everything without opening the browser:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\start_project.ps1 -NoBrowser
-```
-
 ## What It Uses
 
 - Python
@@ -29,7 +7,7 @@ powershell -ExecutionPolicy Bypass -File .\start_project.ps1 -NoBrowser
 - PostgreSQL
 - psycopg
 - python-dotenv
-- ACE-Step local API
+- Stability AI API for music generation
 - Jamendo API for demo tracks with playable audio
 - Scikit-learn for popularity prediction
 - Manual SQL queries
@@ -66,13 +44,15 @@ Example `.env`:
 
 ```env
 DATABASE_URL=postgresql://postgres:your_password@localhost:5433/beatsluv_db
-ACESTEP_API_URL=http://127.0.0.1:7860
-ACESTEP_MODEL=acestep-v15-turbo
-ACESTEP_LM_MODEL_PATH=acestep-5Hz-lm-0.6B
-ACESTEP_LM_BACKEND=pt
-ACESTEP_AUDIO_FORMAT=wav
-ACESTEP_BATCH_SIZE=1
-ACESTEP_INFERENCE_STEPS=8
+MUSIC_PROVIDER=stability
+STABILITY_API_KEY=your_stability_api_key
+STABILITY_API_URL=https://api.stability.ai
+STABILITY_AUDIO_ENDPOINT=/v2beta/audio/stable-audio-2/text-to-audio
+STABILITY_AUDIO_MODEL=stable-audio-2
+STABILITY_AUDIO_FORMAT=mp3
+STABILITY_CFG_SCALE=7
+STABILITY_STEPS=30
+STABILITY_MAX_DURATION_SECONDS=190
 JAMENDO_CLIENT_ID=your_jamendo_client_id
 ```
 
@@ -82,27 +62,6 @@ Create and activate a virtual environment:
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-```
-
-## Demo Data
-
-To add a larger song library with playable audio URLs:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\seed_jamendo_tracks.py --count 300
-```
-
-Useful variants:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\seed_jamendo_tracks.py --count 50 --dry-run
-.\.venv\Scripts\python.exe scripts\seed_jamendo_tracks.py --count 500 --tag reggae --tag blues
-```
-
-If the database does not have enough feedback rows for analytics and prediction:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\seed_demo_feedback.py --per-track 3
 ```
 
 ## Analytics And Prediction
@@ -136,7 +95,7 @@ curl -X POST http://127.0.0.1:8001/generation-requests `
   }'
 ```
 
-The backend calls ACE-Step, saves the generated audio under `generated_audio/`, creates a track row, and returns that track.
+The backend calls Stability AI, saves the generated audio under `generated_audio/`, creates a track row, and returns that track.
 
 ## Admin
 
@@ -164,5 +123,10 @@ POST   /tracks/{track_id}/feedback
 GET    /tracks/{track_id}/feedback
 GET    /analytics/*
 POST   /predictions/popularity
+GET    /playlists
+POST   /playlists
+GET    /playlists/{playlist_id}
+POST   /playlists/{playlist_id}/tracks
+DELETE /playlists/{playlist_id}/tracks/{track_id}
 GET    /admin/*
 ```

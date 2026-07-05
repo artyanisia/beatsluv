@@ -1,37 +1,24 @@
 import os
+from pathlib import Path
 
 import psycopg
 from dotenv import load_dotenv
 from psycopg.rows import dict_row
 
-
-load_dotenv()
-
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(BACKEND_ROOT / ".env", encoding="utf-8-sig")
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-
 def get_connection():
-    """
-    Create a new PostgreSQL connection.
-
-    row_factory=dict_row makes SELECT results look like dictionaries:
-    {"id": 1, "title": "Song"} instead of tuples like (1, "Song").
-    """
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL is not set. Create a .env file first.")
 
-    return psycopg.connect(DATABASE_URL, row_factory=dict_row)
+    return psycopg.connect(DATABASE_URL, row_factory=dict_row, connect_timeout=5)
 
 
 def get_db_connection():
-    """
-    Create a plain tuple-based PostgreSQL connection.
-
-    The auth helpers index rows by position, while the API routers use
-    get_connection() so they can return dictionary-like rows.
-    """
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL is not set. Create a .env file first.")
 
-    return psycopg.connect(DATABASE_URL)
+    return psycopg.connect(DATABASE_URL, connect_timeout=5)

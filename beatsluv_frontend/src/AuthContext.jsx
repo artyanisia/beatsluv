@@ -5,7 +5,7 @@ const AuthContext = createContext();
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error('useAuth trebuie folosit in interiorul AuthProvider');
   }
   return context;
 };
@@ -51,11 +51,11 @@ export const AuthProvider = ({ children }) => {
         const userData = await response.json();
         setUser(userData);
       } else {
-        console.warn('Token validation failed, logging out');
+        console.warn('Validarea sesiunii a esuat, se face deconectarea');
         logout();
       }
     } catch (error) {
-      console.error('Token validation failed:', error);
+      console.error('Validarea sesiunii a esuat:', error);
       logout();
     } finally {
       setLoading(false);
@@ -79,11 +79,11 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('token', data.access_token);
         return { success: true };
       } else {
-        const error = await getErrorMessage(response, 'Login failed');
+        const error = await getErrorMessage(response, 'Conectarea a esuat');
         return { success: false, error };
       }
     } catch (error) {
-      return { success: false, error: `Network error: ${error.message}` };
+      return { success: false, error: `Eroare de retea: ${error.message}` };
     }
   };
 
@@ -93,7 +93,7 @@ export const AuthProvider = ({ children }) => {
     );
 
     if (!response.ok) {
-      const error = await getErrorMessage(response, 'Could not check account');
+      const error = await getErrorMessage(response, 'Nu s-a putut verifica contul');
       throw new Error(error);
     }
 
@@ -116,11 +116,11 @@ export const AuthProvider = ({ children }) => {
         const loginResult = await login(email, password);
         return loginResult;
       } else {
-        const error = await getErrorMessage(response, 'Signup failed');
+        const error = await getErrorMessage(response, 'Inregistrarea a esuat');
         return { success: false, error };
       }
     } catch (error) {
-      return { success: false, error: `Network error: ${error.message}` };
+      return { success: false, error: `Eroare de retea: ${error.message}` };
     }
   };
 

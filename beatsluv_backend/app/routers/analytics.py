@@ -16,6 +16,20 @@ def scalar(cur, query, params=None, default=0):
     return value if value is not None else default
 
 
+def ensure_feedback_detail_columns(conn):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            ALTER TABLE feedback
+            ADD COLUMN IF NOT EXISTS melody_rating INT,
+            ADD COLUMN IF NOT EXISTS originality_rating INT,
+            ADD COLUMN IF NOT EXISTS emotional_impact_rating INT,
+            ADD COLUMN IF NOT EXISTS commercial_potential_rating INT,
+            ADD COLUMN IF NOT EXISTS production_quality_rating INT;
+            """
+        )
+
+
 @router.get("/overview")
 def get_overview_stats(current_user: dict = Depends(verify_token)):
     with get_connection() as conn:
@@ -215,6 +229,7 @@ def get_duration_analysis(current_user: dict = Depends(verify_token)):
 @router.get("/rating-analysis")
 def get_rating_analysis(current_user: dict = Depends(verify_token)):
     with get_connection() as conn:
+        ensure_feedback_detail_columns(conn)
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -255,6 +270,25 @@ def get_rating_analysis(current_user: dict = Depends(verify_token)):
             return {
                 "rating_distribution": rating_distribution,
                 "genre_ratings": genre_ratings,
+                "criteria_averages": {
+                    "melody": scalar(cur, "SELECT ROUND(AVG(melody_rating)::numeric, 2) FROM feedback;", default=0),
+                    "originality": scalar(cur, "SELECT ROUND(AVG(originality_rating)::numeric, 2) FROM feedback;", default=0),
+                    "emotional_impact": scalar(
+                        cur,
+                        "SELECT ROUND(AVG(emotional_impact_rating)::numeric, 2) FROM feedback;",
+                        default=0,
+                    ),
+                    "commercial_potential": scalar(
+                        cur,
+                        "SELECT ROUND(AVG(commercial_potential_rating)::numeric, 2) FROM feedback;",
+                        default=0,
+                    ),
+                    "production_quality": scalar(
+                        cur,
+                        "SELECT ROUND(AVG(production_quality_rating)::numeric, 2) FROM feedback;",
+                        default=0,
+                    ),
+                },
             }
 
 

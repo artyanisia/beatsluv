@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -8,16 +9,13 @@ from jose import JWTError, jwt
 
 from app.database import get_db_connection
 
-# Security configuration
-SECRET_KEY = "your-secret-key-here-change-in-production"  # In production, use environment variable
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 security = HTTPBearer()
 
-
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plain password against its hash."""
     return bcrypt.checkpw(
         plain_password.encode("utf-8"),
         hashed_password.encode("utf-8"),
@@ -25,7 +23,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def get_password_hash(password: str) -> str:
-    """Generate password hash."""
     password_bytes = password.encode("utf-8")
     if len(password_bytes) > 72:
         raise HTTPException(
@@ -37,7 +34,6 @@ def get_password_hash(password: str) -> str:
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    """Create JWT access token."""
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
@@ -50,7 +46,6 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Verify JWT token and return user data."""
     token = credentials.credentials
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -85,7 +80,6 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
 
 
 def authenticate_user(email: str, password: str):
-    """Authenticate user with email and password."""
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:

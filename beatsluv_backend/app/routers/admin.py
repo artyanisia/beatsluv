@@ -10,7 +10,6 @@ from app.database import get_connection
 router = APIRouter(prefix="/admin", tags=["admin"])
 ADMIN_EMAIL = "admin@gmail.com"
 
-
 def require_admin(current_user: dict = Depends(verify_token)):
     if current_user.get("role") != "ADMIN" or current_user.get("email") != ADMIN_EMAIL:
         raise HTTPException(
@@ -33,11 +32,73 @@ class TrackUpdate(BaseModel):
     duration_seconds: Optional[int] = None
     ai_temperature: Optional[float] = None
     key_signature: Optional[str] = None
+    is_public: Optional[bool] = None
+
+
+class PlaylistAdminUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    is_public: Optional[bool] = None
+
+
+def ensure_admin_support(conn):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            ALTER TABLE feedback
+            ADD COLUMN IF NOT EXISTS melody_rating INT,
+            ADD COLUMN IF NOT EXISTS originality_rating INT,
+            ADD COLUMN IF NOT EXISTS emotional_impact_rating INT,
+            ADD COLUMN IF NOT EXISTS commercial_potential_rating INT,
+            ADD COLUMN IF NOT EXISTS production_quality_rating INT;
+
+            ALTER TABLE tracks
+            ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE;
+
+            CREATE TABLE IF NOT EXISTS playlists (
+                id SERIAL PRIMARY KEY,
+                user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                name VARCHAR(255) NOT NULL,
+                description TEXT,
+                is_public BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS playlist_tracks (
+                playlist_id INT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+                track_id INT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+                position INT,
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (playlist_id, track_id)
+            );
+
+            ALTER TABLE playlists
+            ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE;
+
+            CREATE TABLE IF NOT EXISTS prompt_versions (
+                id SERIAL PRIMARY KEY,
+                user_id INT NOT NULL REFERENCES users(id),
+                track_id INT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+                parent_track_id INT REFERENCES tracks(id) ON DELETE SET NULL,
+                version_number INT NOT NULL,
+                prompt TEXT NOT NULL,
+                genre VARCHAR(100),
+                mood VARCHAR(100),
+                tempo INT,
+                duration_seconds INT,
+                ai_temperature NUMERIC(3, 2),
+                key_signature VARCHAR(20),
+                predicted_rating NUMERIC(4, 2),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
 
 
 @router.get("/overview")
 def get_admin_overview(current_user: dict = Depends(require_admin)):
     with get_connection() as conn:
+        ensure_admin_support(conn)
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -46,8 +107,12 @@ def get_admin_overview(current_user: dict = Depends(require_admin)):
                     (SELECT COUNT(*) FROM users WHERE role = 'ADMIN') AS admins,
                     (SELECT COUNT(*) FROM tracks) AS tracks,
                     (SELECT COUNT(*) FROM tracks WHERE audio_url IS NOT NULL) AS playable_tracks,
+                    (SELECT COUNT(*) FROM tracks WHERE COALESCE(is_public, FALSE) = TRUE) AS public_tracks,
+                    (SELECT COUNT(*) FROM playlists) AS playlists,
+                    (SELECT COUNT(*) FROM playlists WHERE COALESCE(is_public, FALSE) = TRUE) AS public_playlists,
                     (SELECT COUNT(*) FROM feedback) AS feedback,
                     (SELECT COUNT(*) FROM generation_requests) AS generation_requests,
+                    (SELECT COUNT(*) FROM prompt_versions) AS prompt_versions,
                     (SELECT COUNT(*) FROM tracks WHERE status = 'COMPLETED') AS completed_tracks;
                 """
             )
@@ -57,6 +122,7 @@ def get_admin_overview(current_user: dict = Depends(require_admin)):
 @router.get("/users")
 def list_users(current_user: dict = Depends(require_admin)):
     with get_connection() as conn:
+        ensure_admin_support(conn)
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -77,6 +143,112 @@ def list_users(current_user: dict = Depends(require_admin)):
             return cur.fetchall()
 
 
+@router.get("/playlists")
+def list_playlists(
+    search: str = "",
+    limit: int = 100,
+    current_user: dict = Depends(require_admin),
+):
+    safe_limit = max(1, min(limit, 500))
+    pattern = f"%{search.strip()}%"
+
+    with get_connection() as conn:
+        ensure_admin_support(conn)
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    p.id,
+                    p.name,
+                    p.description,
+                    COALESCE(p.is_public, FALSE) AS is_public,
+                    p.user_id,
+                    u.email AS user_email,
+                    p.created_at,
+                    COUNT(pt.track_id) AS track_count,
+                    COALESCE(SUM(t.duration_seconds), 0) AS total_duration_seconds,
+                    ROUND(AVG(r.avg_rating)::numeric, 2) AS avg_rating
+                FROM playlists p
+                LEFT JOIN users u ON p.user_id = u.id
+                LEFT JOIN playlist_tracks pt ON p.id = pt.playlist_id
+                LEFT JOIN tracks t ON pt.track_id = t.id
+                LEFT JOIN (
+                    SELECT track_id, AVG(rating) AS avg_rating
+                    FROM feedback
+                    WHERE rating IS NOT NULL
+                    GROUP BY track_id
+                ) r ON r.track_id = t.id
+                WHERE %s = ''
+                   OR p.name ILIKE %s
+                   OR COALESCE(p.description, '') ILIKE %s
+                   OR u.email ILIKE %s
+                GROUP BY p.id, u.email
+                ORDER BY p.id DESC
+                LIMIT %s;
+                """,
+                (search.strip(), pattern, pattern, pattern, safe_limit),
+            )
+            return cur.fetchall()
+
+
+@router.patch("/playlists/{playlist_id}")
+def update_playlist(
+    playlist_id: int,
+    payload: PlaylistAdminUpdate,
+    current_user: dict = Depends(require_admin),
+):
+    updates = payload.model_dump(exclude_unset=True)
+    allowed = {"name", "description", "is_public"}
+    updates = {key: value for key, value in updates.items() if key in allowed}
+    if "name" in updates:
+        updates["name"] = updates["name"].strip()
+        if not updates["name"]:
+            raise HTTPException(status_code=400, detail="Playlist name is required")
+    if not updates:
+        raise HTTPException(status_code=400, detail="No playlist fields to update")
+
+    assignments = ", ".join(f"{key} = %s" for key in updates)
+    values = list(updates.values()) + [playlist_id]
+
+    with get_connection() as conn:
+        ensure_admin_support(conn)
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                UPDATE playlists
+                SET {assignments}
+                WHERE id = %s
+                RETURNING *;
+                """,
+                values,
+            )
+            playlist = cur.fetchone()
+            if not playlist:
+                raise HTTPException(status_code=404, detail="Playlist not found")
+            conn.commit()
+            return playlist
+
+
+@router.delete("/playlists/{playlist_id}")
+def delete_playlist(playlist_id: int, current_user: dict = Depends(require_admin)):
+    with get_connection() as conn:
+        ensure_admin_support(conn)
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM playlists
+                WHERE id = %s
+                RETURNING id, name;
+                """,
+                (playlist_id,),
+            )
+            deleted = cur.fetchone()
+            if not deleted:
+                raise HTTPException(status_code=404, detail="Playlist not found")
+            conn.commit()
+            return {"deleted_playlist": deleted}
+
+
 @router.patch("/users/{user_id}/role")
 def update_user_role(
     user_id: int,
@@ -88,6 +260,7 @@ def update_user_role(
         raise HTTPException(status_code=400, detail="Role must be USER or ADMIN")
 
     with get_connection() as conn:
+        ensure_admin_support(conn)
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -128,6 +301,7 @@ def list_tracks(
                     t.duration_seconds,
                     t.ai_temperature,
                     t.key_signature,
+                    t.is_public,
                     t.user_id,
                     u.email AS user_email,
                     t.created_at,
@@ -166,6 +340,7 @@ def update_track(
         "duration_seconds",
         "ai_temperature",
         "key_signature",
+        "is_public",
     }
     updates = {key: value for key, value in updates.items() if key in allowed}
     if not updates:
@@ -223,6 +398,7 @@ def delete_track(track_id: int, current_user: dict = Depends(require_admin)):
 def list_feedback(limit: int = 100, current_user: dict = Depends(require_admin)):
     safe_limit = max(1, min(limit, 500))
     with get_connection() as conn:
+        ensure_admin_support(conn)
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -234,6 +410,11 @@ def list_feedback(limit: int = 100, current_user: dict = Depends(require_admin))
                     u.email AS user_email,
                     f.rating,
                     f.comment,
+                    f.melody_rating,
+                    f.originality_rating,
+                    f.emotional_impact_rating,
+                    f.commercial_potential_rating,
+                    f.production_quality_rating,
                     f.liked,
                     f.downloaded,
                     f.shared,
