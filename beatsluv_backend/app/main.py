@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -19,9 +20,19 @@ from app.routers import (
 
 app = FastAPI(title="BeatsLuv API")
 
+
+def get_allowed_origins():
+    configured_origins = os.getenv("CORS_ORIGINS", "")
+    origins = [origin.strip() for origin in configured_origins.split(",") if origin.strip()]
+    return origins or [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1):\d+$",
+    allow_origins=get_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
