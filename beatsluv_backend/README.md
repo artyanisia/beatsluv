@@ -64,6 +64,26 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+## Demo Data
+
+After creating the database and running `sql/schema.sql`, populate it with presentation data:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\seed_demo_data.py
+```
+
+This creates:
+
+- `admin@gmail.com` with password `pass123`
+- `user001@gmail.com` through `user500@gmail.com` with password `pass123`
+- demo tracks, feedback, playlists, and prompt versions
+
+You can customize the size:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\seed_demo_data.py --users 500 --tracks 240 --feedback 1200 --playlists 120
+```
+
 ## Analytics And Prediction
 
 The dashboard uses SQL analytics endpoints under `/analytics` for descriptive statistics:
