@@ -279,7 +279,7 @@ const TrackLibrary = () => {
       filtered = filtered.filter((track) => track.genre === filters.genre);
     }
 
-    // Stare filter
+    // Sentiment filter
     if (filters.mood) {
       filtered = filtered.filter((track) => track.mood === filters.mood);
     }
@@ -384,7 +384,7 @@ const TrackLibrary = () => {
 
   // Get unique values for filters
   const uniqueGens = [...new Set(tracks.map((track) => track.genre).filter(Boolean))];
-  const uniqueStares = [...new Set(tracks.map((track) => track.mood).filter(Boolean))];
+  const uniqueSentimente = [...new Set(tracks.map((track) => track.mood).filter(Boolean))];
   return (
     <div className="track-library">
       {message && <div className="status-message">{message}</div>}
@@ -446,14 +446,14 @@ const TrackLibrary = () => {
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="mood-filter">Stare</label>
+                    <label htmlFor="mood-filter">Sentiment</label>
                     <select
                       id="mood-filter"
                       value={filters.mood}
                       onChange={(e) => updateFilter("mood", e.target.value)}
                     >
-                      <option value="">Toate starile</option>
-                      {uniqueStares.map((mood) => (
+                      <option value="">Toate sentimentele</option>
+                      {uniqueSentimente.map((mood) => (
                         <option key={mood} value={mood}>
                           {mood}
                         </option>
@@ -643,7 +643,7 @@ const TrackLibrary = () => {
                     <strong>{selectedTrack.genre || "Indisponibil"}</strong>
                   </div>
                   <div>
-                    <span>Stare</span>
+                    <span>Sentiment</span>
                     <strong>{selectedTrack.mood || "Indisponibil"}</strong>
                   </div>
                   <div>

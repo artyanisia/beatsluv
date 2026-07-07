@@ -5,10 +5,11 @@
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^5.1.1",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
-    "recharts": "^3.8.1",
-    "vite": "^7.2.6"
+    "@vitejs/plugin-react": "^6.0.3",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-is": "^19.2.7",
+    "recharts": "^3.9.2",
+    "vite": "^8.1.3"
   }
 }

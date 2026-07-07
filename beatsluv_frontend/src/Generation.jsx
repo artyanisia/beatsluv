@@ -379,7 +379,7 @@ const Generation = () => {
                     />
                   </div>
                   <div className="form-group">
-                    <label htmlFor="pred-mood">Stare</label>
+                    <label htmlFor="pred-mood">Sentiment</label>
                     <input
                       id="pred-mood"
                       value={predictionForm.mood}
@@ -549,7 +549,7 @@ const Generation = () => {
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="mood">Stare</label>
+                    <label htmlFor="mood">Sentiment</label>
                     <input
                       id="mood"
                       value={generationForm.mood}
@@ -663,7 +663,7 @@ const Generation = () => {
                     <div className="info-value">{generatedTrack.genre || "Mixt"}</div>
                   </div>
                   <div className="track-info-item">
-                    <div className="info-label">Stare</div>
+                    <div className="info-label">Sentiment</div>
                     <div className="info-value">{generatedTrack.mood || "Echilibrata"}</div>
                   </div>
                   <div className="track-info-item">

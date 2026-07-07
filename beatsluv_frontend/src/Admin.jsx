@@ -215,7 +215,7 @@ function AdminPage() {
           <div className="admin-search">
             <input
               value={search}
-              placeholder="Cauta dupa titlu, gen sau stare"
+              placeholder="Cauta dupa titlu, gen sau sentiment"
               onChange={(event) => setCauta(event.target.value)}
             />
             <button type="button" onClick={loadAdminData}>Cauta</button>
@@ -226,7 +226,7 @@ function AdminPage() {
               <span>Titlu</span>
               <span>Status</span>
               <span>Gen</span>
-              <span>Stare</span>
+              <span>Sentiment</span>
               <span>Tempo</span>
               <span>Public</span>
               <span>Rating</span>

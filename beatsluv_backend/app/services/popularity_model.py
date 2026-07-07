@@ -129,7 +129,7 @@ def build_prediction_explanation(features, rows, predicted_rating):
 
     if same_mood:
         mood_avg = sum(same_mood) / len(same_mood)
-        explanations.append(f"Piesele cu starea {mood} au o medie de {mood_avg:.2f}/5 pe baza feedbackului.")
+        explanations.append(f"Piesele cu sentimentul {mood} au o medie de {mood_avg:.2f}/5 pe baza feedbackului.")
 
     if 95 <= tempo <= 135:
         explanations.append("Tempo-ul ales se afla intr-un interval mediu, potrivit pentru ascultare usoara.")
@@ -141,7 +141,7 @@ def build_prediction_explanation(features, rows, predicted_rating):
     elif predicted_rating < 3:
         explanations.append("Modelul estimeaza un raspuns mai slab daca promptul sau aranjamentul nu este rafinat.")
 
-    return explanations[:4] or ["Predictia se bazeaza pe gen, stare, tempo, durata, tonalitate si temperatura AI."]
+    return explanations[:4] or ["Predictia se bazeaza pe gen, sentiment, tempo, durata, tonalitate si temperatura AI."]
 
 
 def get_recommendations():
@@ -189,7 +189,7 @@ def get_recommendations():
         {
             "title": f"{row['genre']} + {row['mood']}",
             "prompt": (
-                f"Creeaza o piesa {row['genre'].lower()} cu stare {row['mood'].lower()}, "
+                f"Creeaza o piesa {row['genre'].lower()} cu sentiment {row['mood'].lower()}, "
                 "refren memorabil, aranjament curat si contrast emotional puternic"
             ),
             "genre": row["genre"],

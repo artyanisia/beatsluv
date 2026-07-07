@@ -34,6 +34,14 @@ const ENDPOINTS = {
   monthly: "/analytics/monthly-evolution",
 };
 
+const CHART_VIEWS = [
+  { value: "genres", label: "Analiza genuri" },
+  { value: "ratings", label: "Analiza evaluari" },
+  { value: "trends", label: "Tendinte temporale" },
+  { value: "technical", label: "Date Tehnice" },
+  { value: "users", label: "Analiza utilizatori" },
+];
+
 const chartAxis = {
   tick: { fill: "#a0aec0", fontSize: 12 },
   axisLine: false,
@@ -179,7 +187,7 @@ const Dashboard = () => {
   const { getAuthHeaders, user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedChart, setSelectedChart] = useState("");
+  const [selectedChart, setSelectedChart] = useState("genres");
   const [data, setData] = useState({
     overview: null,
     genres: [],
@@ -306,28 +314,28 @@ const Dashboard = () => {
       {overview && (
         <div className="stats-grid">
           <VisionStatCard
-            label="Utilizatori Azi"
+            label="Utilizatori Total"
             value={overview.total_users.toLocaleString()}
             icon="users"
-            change="+3% fata de ieri"
+            change="Conturi inregistrate in platforma"
           />
           <VisionStatCard
-            label="Venit estimat"
-            value={`${(overview.total_tracks * 103).toLocaleString()} RON`}
+            label="Feedback Total"
+            value={overview.total_feedback.toLocaleString()}
             icon="sales"
-            change="+5% fata de saptamana trecuta"
+            change="Evaluari salvate in baza de date"
           />
           <VisionStatCard
             label="Piese Totale"
             value={overview.total_tracks.toLocaleString()}
             icon="music"
-            change="+12% in aceasta luna"
+            change={`${overview.playable_tracks.toLocaleString()} piese cu audio disponibil`}
           />
           <VisionStatCard
             label="Evaluare Medie"
             value={`${overview.avg_rating}/5`}
             icon="star"
-            change="+2% calitate imbunatatita"
+            change="Calculata din feedbackul utilizatorilor"
           />
         </div>
       )}
@@ -345,7 +353,7 @@ const Dashboard = () => {
           <div className="card-header">
             <div>
               <h3 className="card-title">Urmarire feedback</h3>
-              <p className="card-subtitle">Starea evaluarilor in timp real</p>
+              <p className="card-subtitle">Situatia evaluarilor in timp real</p>
             </div>
             <button type="button" className="icon-button" aria-label="Mai multe optiuni">
               <DashboardIcon name="more" />
@@ -381,20 +389,21 @@ const Dashboard = () => {
 
       <div className="analytics-controls">
         <div className="chart-selector">
-          <label htmlFor="chart-select">Selecteaza vizualizarea graficelor:</label>
-          <select 
-            id="chart-select"
-            value={selectedChart} 
-            onChange={(e) => setSelectedChart(e.target.value)}
-            className="chart-dropdown"
-          >
-            <option value="">Alege o vizualizare grafica...</option>
-            <option value="genres">Analiza genuri</option>
-            <option value="ratings">Analiza evaluari</option>
-            <option value="trends">Tendinte temporale</option>
-            <option value="technical">Date Tehnice</option>
-            <option value="users">Analiza utilizatori</option>
-          </select>
+          <p className="chart-selector-label">Selecteaza vizualizarea graficelor:</p>
+          <div className="chart-tab-bar" role="tablist" aria-label="Vizualizarea graficelor">
+            {CHART_VIEWS.map((view) => (
+              <button
+                key={view.value}
+                type="button"
+                role="tab"
+                aria-selected={selectedChart === view.value}
+                className={`chart-tab-button ${selectedChart === view.value ? "active" : ""}`}
+                onClick={() => setSelectedChart(view.value)}
+              >
+                {view.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -419,7 +428,7 @@ const Dashboard = () => {
               )}
             </ChartCard>
 
-            <ChartCard title="Piese dupa stare">
+            <ChartCard title="Piese dupa sentiment">
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={moods}>
                   <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />

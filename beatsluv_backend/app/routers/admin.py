@@ -288,6 +288,7 @@ def list_tracks(
     pattern = f"%{search.strip()}%"
 
     with get_connection() as conn:
+        ensure_admin_support(conn)
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -350,6 +351,7 @@ def update_track(
     values = list(updates.values()) + [track_id]
 
     with get_connection() as conn:
+        ensure_admin_support(conn)
         with conn.cursor() as cur:
             cur.execute(
                 f"""
@@ -370,6 +372,7 @@ def update_track(
 @router.delete("/tracks/{track_id}")
 def delete_track(track_id: int, current_user: dict = Depends(require_admin)):
     with get_connection() as conn:
+        ensure_admin_support(conn)
         with conn.cursor() as cur:
             cur.execute("SELECT generation_request_id FROM tracks WHERE id = %s;", (track_id,))
             row = cur.fetchone()

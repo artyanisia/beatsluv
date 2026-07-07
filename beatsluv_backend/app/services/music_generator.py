@@ -16,7 +16,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+BACKEND_ROOT = PROJECT_ROOT
 GENERATED_AUDIO_DIR = PROJECT_ROOT / "generated_audio"
+
+load_dotenv(BACKEND_ROOT / ".env", encoding="utf-8-sig")
 
 DEFAULT_STABILITY_API_URL = "https://api.stability.ai"
 DEFAULT_STABILITY_AUDIO_ENDPOINT = "/v2beta/audio/stable-audio-2/text-to-audio"
@@ -32,6 +35,7 @@ class MusicGenerationError(RuntimeError):
 class MusicGeneratorService:
     def generate_track(self, prompt, genre=None, mood=None, tempo=None, duration_seconds=30):
         provider = os.getenv("MUSIC_PROVIDER", "stability").strip().lower()
+        logger.info("Music provider selected: %s", provider)
         try:
             if provider == "stability":
                 return self._stability_generate_track(prompt, genre, mood, tempo, duration_seconds)
@@ -185,6 +189,7 @@ class MusicGeneratorService:
         return "Generated Track"
 
     def _demo_generate_track(self, prompt, genre=None, mood=None, tempo=None, duration_seconds=30):
+        logger.info("Generating local demo audio.")
         duration = min(self._clamp_duration(duration_seconds), 45)
         tempo_bpm = self._safe_tempo(tempo or 100)
         file_name = f"demo_{uuid4().hex}.wav"
